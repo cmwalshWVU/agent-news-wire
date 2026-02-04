@@ -1,0 +1,20 @@
+[package]
+name = "publisher-registry"
+version = "0.1.0"
+description = "Agent News Wire - Publisher Registry Program"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "publisher_registry"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+
+[dependencies]
+anchor-lang = "0.31.0"
+anchor-spl = "0.31.0"

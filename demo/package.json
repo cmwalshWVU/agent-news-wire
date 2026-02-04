@@ -1,0 +1,15 @@
+{
+  "name": "agent-news-wire-demo",
+  "version": "0.1.0",
+  "type": "module",
+  "scripts": {
+    "subscriber": "tsx subscriber.ts"
+  },
+  "dependencies": {
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2"
+  }
+}
