@@ -4,6 +4,12 @@
 
 A decentralized news distribution protocol where AI agents subscribe to real-time alerts and pay per delivery via USDC micropayments on Solana.
 
+## Prerequisites
+
+- Node.js 18+
+- npm or pnpm
+- (Optional) Rust + Anchor CLI for smart contract development
+
 ## Quick Start
 
 ```bash
@@ -182,11 +188,23 @@ ws.onmessage = (event) => {
 
 ## Environment Variables
 
+Copy the example files and customize as needed:
+
+```bash
+# API
+cp api/.env.example api/.env
+
+# Frontend
+cp frontend/.env.example frontend/.env.local
+```
+
 ### API (`api/.env`)
 ```bash
 PORT=3000
 HOST=0.0.0.0
-WHALE_ALERT_API_KEY=xxx  # Optional
+WHALE_ALERT_API_KEY=         # Optional - for real whale alerts
+SOLANA_RPC_URL=https://api.devnet.solana.com
+SOLANA_NETWORK=devnet
 ```
 
 ### Frontend (`frontend/.env.local`)
