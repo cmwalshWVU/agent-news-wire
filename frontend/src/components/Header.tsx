@@ -3,7 +3,7 @@
 import { FC } from 'react';
 import Link from 'next/link';
 import { usePathname } from 'next/navigation';
-import { WalletMultiButton } from '@solana/wallet-adapter-react-ui';
+import { WalletButton } from './WalletButton';
 import { Zap, LayoutDashboard, Bell, CreditCard, Settings } from 'lucide-react';
 
 const navItems = [
@@ -59,7 +59,7 @@ export const Header: FC = () => {
           
           {/* Wallet Button */}
           <div className="flex items-center">
-            <WalletMultiButton className="!bg-primary-600 hover:!bg-primary-700 !rounded-lg !h-10" />
+            <WalletButton />
           </div>
         </div>
       </div>
