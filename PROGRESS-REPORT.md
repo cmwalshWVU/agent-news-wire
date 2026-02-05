@@ -89,12 +89,14 @@ npm run dev
 ### 3. Data Ingestion Pipeline
 **Location:** `agent-news-wire/api/src/ingestion/`
 
-Four data sources implemented:
+Six data sources implemented:
 
 | Source | File | Channels | Status |
 |--------|------|----------|--------|
 | SEC EDGAR | `sec-edgar.ts` | regulatory/sec | ✅ Working |
-| DeFiLlama | `defillama.ts` | defi/yields, defi/protocols | ✅ Working |
+| CFTC | `cftc.ts` | regulatory/cftc | ✅ Working |
+| DeFiLlama TVL/Yields | `defillama.ts` | defi/yields, defi/protocols | ✅ Working |
+| DeFiLlama Hacks | `rekt-news.ts` | defi/hacks | ✅ Working |
 | Whale Alert | `whale-alert.ts` | markets/whale-movements | ✅ Mock data |
 | Genfinity | `genfinity.ts` | Multiple (networks, institutional) | ✅ Working |
 
@@ -300,6 +302,17 @@ open http://localhost:3001
 - ✅ Balance page with deposit flow
 - ✅ Build successful (all pages generated)
 
+### Session 3 (2026-02-05)
+- ✅ **Added CFTC data source** (`regulatory/cftc` channel)
+  - Polls both General and Enforcement RSS feeds
+  - Filters for crypto-related content
+  - Detects enforcement actions vs press releases
+- ✅ **Added DeFi Hacks data source** (`defi/hacks` channel)
+  - Primary: DeFiLlama Hacks API (structured data)
+  - Backup: Rekt News scraper (additional coverage)
+  - Impact scoring based on loss amount
+- ✅ Updated all documentation (DATA-SOURCES.md, TODO.md, PROGRESS-REPORT.md)
+
 ---
 
 ## What's Next
@@ -309,14 +322,16 @@ open http://localhost:3001
 - ✅ Trial mode active - everything is free
 - ✅ Wallet connect works
 - ✅ On-chain subscriptions work
+- ✅ 6 data sources active (SEC, CFTC, DeFiLlama x2, Whale Alert, Genfinity)
 
 ### To Do
 1. Test USDC deposits with devnet USDC
-2. Add more data sources (CFTC, Rekt News)
-3. Implement publisher system
-4. Add persistence layer
-5. Production deployment
+2. Integrate real Whale Alert API (need API key)
+3. Add Helius webhooks for Solana on-chain events
+4. Implement publisher system
+5. Add persistence layer (SQLite/Postgres)
+6. Production deployment
 
 ---
 
-*Last updated: 2026-02-04 00:00 UTC*
+*Last updated: 2026-02-05 01:45 UTC*

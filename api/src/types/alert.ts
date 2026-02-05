@@ -9,6 +9,8 @@ export type AlertSentiment = z.infer<typeof AlertSentiment>;
 export const SourceType = z.enum([
   'regulatory_filing',
   'press_release',
+  'enforcement_action',
+  'security_incident',
   'on_chain',
   'social',
   'news',

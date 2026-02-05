@@ -49,6 +49,8 @@ export interface SubscriberAccount {
   alertsReceived: bigint;
   createdAt: bigint;
   active: boolean;
+  bump: number;
+  vaultBump: number;
 }
 
 export interface OnChainConfig {
@@ -150,6 +152,7 @@ export class SolanaClient {
   
   /**
    * Fetch subscriber account data
+   * Updated for v2: includes bump and vault_bump fields
    */
   async getSubscriber(owner: PublicKey): Promise<SubscriberAccount | null> {
     try {
@@ -172,6 +175,11 @@ export class SolanaClient {
       const createdAt = data.readBigInt64LE(offset);
       offset += 8;
       const active = data.readUInt8(offset) === 1;
+      offset += 1;
+      const bump = data.readUInt8(offset);
+      offset += 1;
+      // vault_bump may not exist in old accounts - handle gracefully
+      const vaultBump = offset < data.length ? data.readUInt8(offset) : 0;
       
       return {
         owner: ownerPubkey,
@@ -180,6 +188,8 @@ export class SolanaClient {
         alertsReceived,
         createdAt,
         active,
+        bump,
+        vaultBump,
       };
     } catch (err) {
       console.error('[Solana] Error fetching subscriber:', err);
@@ -239,12 +249,15 @@ export class SolanaClient {
   /**
    * Create a new subscriber account on-chain (requires owner keypair)
    * Returns the transaction signature
+   * 
+   * Updated for v2: Now also creates the subscriber_vault TokenAccount
    */
   async createSubscriber(
     ownerKeypair: Keypair,
     channels: number[]
   ): Promise<string> {
     const [subscriberPDA] = this.getSubscriberPDA(ownerKeypair.publicKey);
+    const [subscriberVault] = this.getSubscriberVaultPDA(ownerKeypair.publicKey);
     
     // Build instruction
     // Anchor discriminator for create_subscriber = sha256("global:create_subscriber")[0..8]
@@ -255,13 +268,18 @@ export class SolanaClient {
     
     const data = Buffer.concat([discriminator, channelsBuffer]);
     
+    // Updated account list for v2 (with vault initialization)
     const ix = new TransactionInstruction({
       programId: SUBSCRIPTION_PROGRAM_ID,
       keys: [
         { pubkey: SUBSCRIPTION_CONFIG_PDA, isSigner: false, isWritable: true },
         { pubkey: subscriberPDA, isSigner: false, isWritable: true },
+        { pubkey: subscriberVault, isSigner: false, isWritable: true },
+        { pubkey: DEVNET_USDC_MINT, isSigner: false, isWritable: false },
         { pubkey: ownerKeypair.publicKey, isSigner: true, isWritable: true },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+        { pubkey: new PublicKey('SysvarRent111111111111111111111111111111111'), isSigner: false, isWritable: false },
       ],
       data,
     });
@@ -273,6 +291,8 @@ export class SolanaClient {
   /**
    * Build createSubscriber transaction for client-side signing
    * Returns base64-encoded transaction that client can sign and send
+   * 
+   * Updated for v2: Now also creates the subscriber_vault TokenAccount
    */
   async buildCreateSubscriberTx(
     owner: PublicKey,
@@ -280,9 +300,11 @@ export class SolanaClient {
   ): Promise<{
     transaction: string;
     subscriberPDA: string;
+    subscriberVault: string;
     message: string;
   }> {
     const [subscriberPDA] = this.getSubscriberPDA(owner);
+    const [subscriberVault] = this.getSubscriberVaultPDA(owner);
     
     // Check if already exists
     const exists = await this.subscriberExists(owner);
@@ -310,13 +332,18 @@ export class SolanaClient {
     
     const data = Buffer.concat([discriminator, channelsBuffer]);
     
+    // Updated account list for v2 (with vault initialization)
     const ix = new TransactionInstruction({
       programId: SUBSCRIPTION_PROGRAM_ID,
       keys: [
         { pubkey: SUBSCRIPTION_CONFIG_PDA, isSigner: false, isWritable: true },
         { pubkey: subscriberPDA, isSigner: false, isWritable: true },
+        { pubkey: subscriberVault, isSigner: false, isWritable: true },
+        { pubkey: DEVNET_USDC_MINT, isSigner: false, isWritable: false },
         { pubkey: owner, isSigner: true, isWritable: true },
         { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
+        { pubkey: TOKEN_PROGRAM_ID, isSigner: false, isWritable: false },
+        { pubkey: new PublicKey('SysvarRent111111111111111111111111111111111'), isSigner: false, isWritable: false },
       ],
       data,
     });
@@ -337,7 +364,8 @@ export class SolanaClient {
     return {
       transaction: serialized.toString('base64'),
       subscriberPDA: subscriberPDA.toBase58(),
-      message: 'Sign and submit this transaction to create your on-chain subscription',
+      subscriberVault: subscriberVault.toBase58(),
+      message: 'Sign and submit this transaction to create your on-chain subscription with USDC vault',
     };
   }
 

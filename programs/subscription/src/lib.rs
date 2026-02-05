@@ -1,5 +1,5 @@
 use anchor_lang::prelude::*;
-use anchor_spl::token::{Token, TokenAccount, Transfer, transfer};
+use anchor_spl::token::{Mint, Token, TokenAccount, Transfer, transfer};
 
 declare_id!("H18zPB6sm7THZbBBtayAyjtQnfRvwN7E72Kxnomd2TVJ");
 
@@ -34,7 +34,7 @@ pub mod subscription_registry {
         Ok(())
     }
 
-    /// Create a new subscriber account
+    /// Create a new subscriber account and USDC vault
     pub fn create_subscriber(
         ctx: Context<CreateSubscriber>,
         channels: Vec<u8>, // Bitmap of subscribed channels
@@ -49,11 +49,12 @@ pub mod subscription_registry {
         subscriber.created_at = Clock::get()?.unix_timestamp;
         subscriber.active = true;
         subscriber.bump = ctx.bumps.subscriber;
+        subscriber.vault_bump = ctx.bumps.subscriber_vault;
         
         let config = &mut ctx.accounts.config;
         config.total_subscribers += 1;
         
-        msg!("Subscriber created: {}", subscriber.owner);
+        msg!("Subscriber created with vault: {}", subscriber.owner);
         Ok(())
     }
 
@@ -211,6 +212,7 @@ pub struct Subscriber {
     pub created_at: i64,
     pub active: bool,
     pub bump: u8,
+    pub vault_bump: u8,             // Bump for subscriber_vault PDA
 }
 
 #[account]
@@ -259,16 +261,35 @@ pub struct CreateSubscriber<'info> {
     #[account(
         init,
         payer = owner,
-        space = 8 + 32 + 4 + 8 + 8 + 8 + 1 + 1,
+        space = 8 + 32 + 4 + 8 + 8 + 8 + 1 + 1 + 1, // Added 1 byte for vault_bump
         seeds = [b"subscriber", owner.key().as_ref()],
         bump
     )]
     pub subscriber: Account<'info, Subscriber>,
     
+    /// Subscriber's USDC vault - initialized alongside subscriber account
+    #[account(
+        init,
+        payer = owner,
+        seeds = [b"subscriber_vault", owner.key().as_ref()],
+        bump,
+        token::mint = usdc_mint,
+        token::authority = subscriber_vault,
+    )]
+    pub subscriber_vault: Account<'info, TokenAccount>,
+    
+    /// USDC mint (must match config.usdc_mint)
+    #[account(
+        constraint = usdc_mint.key() == config.usdc_mint @ ErrorCode::InvalidMint
+    )]
+    pub usdc_mint: Account<'info, Mint>,
+    
     #[account(mut)]
     pub owner: Signer<'info>,
     
     pub system_program: Program<'info, System>,
+    pub token_program: Program<'info, Token>,
+    pub rent: Sysvar<'info, Rent>,
 }
 
 #[derive(Accounts)]
@@ -414,4 +435,6 @@ pub enum ErrorCode {
     Overflow,
     #[msg("Unauthorized")]
     Unauthorized,
+    #[msg("Invalid USDC mint")]
+    InvalidMint,
 }

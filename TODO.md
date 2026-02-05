@@ -1,7 +1,7 @@
 # Agent News Wire - TODO List
 
 **Created:** 2026-02-03  
-**Last Updated:** 2026-02-04 00:00 UTC
+**Last Updated:** 2026-02-05 01:45 UTC
 
 ---
 
@@ -51,6 +51,7 @@
 
 ### End-to-End Testing
 - [x] Create subscriber on-chain ✅
+- [x] Fix: Subscriber vault now created with subscriber ✅ (2026-02-05)
 - [ ] Deposit USDC using deposit-tx (needs devnet USDC)
 - [ ] Connect WebSocket, receive alerts
 - [ ] Verify balance deductions on-chain
@@ -60,8 +61,8 @@
 ## 🔴 High Priority (This Week)
 
 ### Data Sources
-- [ ] Add CFTC RSS feed (`regulatory/cftc` channel)
-- [ ] Add Rekt News scraper (`defi/hacks` channel)
+- [x] Add CFTC RSS feed (`regulatory/cftc` channel) ✅ 2026-02-05
+- [x] Add Rekt News / DeFiLlama Hacks (`defi/hacks` channel) ✅ 2026-02-05
 - [ ] Integrate real Whale Alert API (get API key)
 - [ ] Add Helius webhooks for Solana on-chain events
 
@@ -194,12 +195,12 @@ cargo-build-sbf --tools-version v1.52 --manifest-path <program>/Cargo.toml
 |----------|------|-------|---|
 | Frontend | 14 | 14 | 100% |
 | API | 15 | 17 | 88% |
-| Data Sources | 4 | 10 | 40% |
+| Data Sources | 6 | 10 | 60% |
 | Smart Contracts | 22 | 23 | 96% |
 | Publisher | 0 | 5 | 0% |
 | SDK | 9 | 10 | 90% |
 | Documentation | 6 | 8 | 75% |
-| **Overall** | **70** | **87** | **80%** |
+| **Overall** | **72** | **87** | **83%** |
 
 ---
 

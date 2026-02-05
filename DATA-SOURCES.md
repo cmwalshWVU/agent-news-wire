@@ -28,15 +28,21 @@ https://data.sec.gov/submissions/CIK0001679788.json
 - No-action letters
 - Comment letters
 
-### CFTC
+### CFTC ✅ IMPLEMENTED
 
 ```bash
-# Press releases RSS
-https://www.cftc.gov/PressRoom/PressReleases/rss
+# General Press Releases RSS
+https://www.cftc.gov/RSS/RSSGP/rssgp.xml
 
-# Enforcement actions
-https://www.cftc.gov/LawRegulation/Enforcement/EnforcementActions
+# Enforcement Press Releases RSS
+https://www.cftc.gov/RSS/RSSENF/rssenf.xml
 ```
+
+**Implementation:** `api/src/ingestion/cftc.ts`
+- Polls both General and Enforcement RSS feeds
+- Filters for crypto-related content using keyword matching
+- Detects enforcement actions vs general announcements
+- Estimates impact score based on content analysis
 
 ### Federal Register (All US Regulatory)
 
@@ -115,11 +121,26 @@ https://stablecoins.llama.fi/stablecoins
 - New protocol with >$10M TVL
 - Yield spikes (arbitrage)
 
-### DeFi Hacks
+### DeFi Hacks ✅ IMPLEMENTED
 
-- Scrape rekt.news
-- Monitor @PeckShieldAlert, @SlowMist_Team on Twitter
-- Protocol Discord #announcements
+**Implementation:** `api/src/ingestion/rekt-news.ts`
+
+Primary: DeFiLlama Hacks API
+```bash
+https://api.llama.fi/hacks
+```
+- Returns comprehensive list of all tracked hacks
+- Includes amount, chain, classification, technique
+- Filtered to last 30 days for relevance
+
+Secondary: Rekt News scraper (backup coverage)
+- Extracts articles from rekt.news homepage
+- Parses loss amounts from headlines
+
+**Features:**
+- Automatic impact scoring based on loss amount ($100M+ = 10, $1M+ = 6, etc.)
+- Chain extraction and entity detection
+- Deduplication across sources
 
 ### Protocol Announcements
 
@@ -242,27 +263,29 @@ https://lunarcrush.com/api
 
 ## MVP Implementation Priority
 
-### Tier 1: Must Have (Days 1-3)
+### Tier 1: Must Have ✅ COMPLETE
 
-| Source | Channel | Method | Difficulty |
-|--------|---------|--------|------------|
-| SEC EDGAR | regulatory/sec | RSS polling | Easy |
-| DeFiLlama | defi/yields | API polling | Easy |
-| Whale Alert | markets/whales | API/Webhook | Easy |
+| Source | Channel | Method | Status |
+|--------|---------|--------|--------|
+| SEC EDGAR | regulatory/sec | RSS polling | ✅ Implemented |
+| DeFiLlama TVL/Yields | defi/yields, defi/protocols | API polling | ✅ Implemented |
+| Whale Alert | markets/whales | Mock data | ✅ Implemented (needs API key for real data) |
+| Genfinity | Multiple | RSS parsing | ✅ Implemented |
 
-### Tier 2: Nice to Have (Days 4-7)
+### Tier 2: Nice to Have ✅ COMPLETE
+
+| Source | Channel | Method | Status |
+|--------|---------|--------|--------|
+| CFTC | regulatory/cftc | RSS polling | ✅ Implemented |
+| DeFiLlama Hacks | defi/hacks | API | ✅ Implemented |
+| Rekt News | defi/hacks | Scraper | ✅ Implemented (backup) |
+
+### Tier 3: Future (Not Started)
 
 | Source | Channel | Method | Difficulty |
 |--------|---------|--------|------------|
 | Bank newsrooms | institutional/banks | Scraper | Medium |
-| Rekt News | defi/hacks | Scraper | Easy |
-| CFTC | regulatory/cftc | RSS | Easy |
-| Helius | solana/whales | Webhook | Medium |
-
-### Tier 3: Stretch (Days 8-10)
-
-| Source | Channel | Method | Difficulty |
-|--------|---------|--------|------------|
+| Helius | networks/solana | Webhook | Medium |
 | Protocol Discords | defi/protocols | Bot integration | Hard |
 | Global regulators | regulatory/global | Multi-scraper | Hard |
 

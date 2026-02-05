@@ -149,24 +149,24 @@ ws.onmessage = (event) => {
 
 ## Channels
 
-| Channel | Description |
-|---------|-------------|
-| `regulatory/sec` | SEC EDGAR filings |
-| `regulatory/cftc` | CFTC news & enforcement |
-| `regulatory/global` | International regulators |
-| `institutional/banks` | Major bank announcements |
-| `institutional/asset-managers` | Fund & ETF news |
-| `defi/yields` | DeFi yield opportunities |
-| `defi/hacks` | Exploits & security incidents |
-| `defi/protocols` | Protocol TVL changes |
-| `rwa/tokenization` | Real-world asset tokenization |
-| `networks/solana` | Solana network news |
-| `networks/ethereum` | Ethereum network news |
-| `networks/hedera` | Hedera/HBAR news |
-| `networks/ripple` | Ripple/XRP news |
-| `networks/bitcoin` | Bitcoin news |
-| `markets/whale-movements` | Large crypto transfers |
-| `markets/liquidations` | Major liquidation events |
+| Channel | Description | Data Source |
+|---------|-------------|-------------|
+| `regulatory/sec` | SEC EDGAR filings | ✅ SEC RSS |
+| `regulatory/cftc` | CFTC news & enforcement | ✅ CFTC RSS |
+| `regulatory/global` | International regulators | 🔜 Coming soon |
+| `institutional/banks` | Major bank announcements | ✅ Genfinity |
+| `institutional/asset-managers` | Fund & ETF news | ✅ Genfinity |
+| `defi/yields` | DeFi yield opportunities | ✅ DeFiLlama |
+| `defi/hacks` | Exploits & security incidents | ✅ DeFiLlama + Rekt |
+| `defi/protocols` | Protocol TVL changes | ✅ DeFiLlama |
+| `rwa/tokenization` | Real-world asset tokenization | ✅ Genfinity |
+| `networks/solana` | Solana network news | ✅ Genfinity |
+| `networks/ethereum` | Ethereum network news | ✅ Genfinity |
+| `networks/hedera` | Hedera/HBAR news | ✅ Genfinity |
+| `networks/ripple` | Ripple/XRP news | ✅ Genfinity |
+| `networks/bitcoin` | Bitcoin news | ✅ Genfinity |
+| `markets/whale-movements` | Large crypto transfers | ⚠️ Mock data |
+| `markets/liquidations` | Major liquidation events | 🔜 Coming soon |
 
 ## Smart Contracts (Devnet)
 
