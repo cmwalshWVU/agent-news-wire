@@ -35,10 +35,18 @@ export class AlertStore {
       return null; // Duplicate
     }
 
+    // Use original publication time if available, otherwise use now
+    const timestamp = input.publishedAt 
+      ? new Date(input.publishedAt).toISOString()
+      : new Date().toISOString();
+
+    // Remove publishedAt from input before spreading (it's not part of Alert type)
+    const { publishedAt, ...alertData } = input;
+
     const alert: Alert = {
-      ...input,
+      ...alertData,
       alertId: `wire-${Date.now()}-${uuid().slice(0, 8)}`,
-      timestamp: new Date().toISOString()
+      timestamp
     };
 
     this.alerts.set(alert.alertId, alert);

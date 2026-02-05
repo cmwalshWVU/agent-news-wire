@@ -57,5 +57,7 @@ export const Alert = z.object({
 });
 export type Alert = z.infer<typeof Alert>;
 
-export const AlertInput = Alert.omit({ alertId: true, timestamp: true });
+export const AlertInput = Alert.omit({ alertId: true, timestamp: true }).extend({
+  publishedAt: z.string().optional() // Original publication timestamp from source
+});
 export type AlertInput = z.infer<typeof AlertInput>;

@@ -139,6 +139,7 @@ export async function fetchSECFilings(): Promise<AlertInput[]> {
         sourceType: 'regulatory_filing',
         sentiment: 'neutral',
         impactScore,
+        publishedAt: entry.updated, // Use SEC filing timestamp
         rawData: { formType, originalTitle: title }
       };
 

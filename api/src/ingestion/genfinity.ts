@@ -227,6 +227,7 @@ export async function fetchGenfinityNews(): Promise<AlertInput[]> {
         sourceType: 'news',
         sentiment: 'neutral',
         impactScore,
+        publishedAt: item.pubDate, // Use original publication date
         rawData: { 
           source: 'genfinity',
           categories,
