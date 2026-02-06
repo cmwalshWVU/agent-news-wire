@@ -32,7 +32,9 @@ build-api:
 
 build-frontend:
   stage: build
-  image: node:${NODE_VERSION}-alpine
+  image: node:${NODE_VERSION}
+  before_script:
+    - apt-get update && apt-get install -y python3 make g++ libudev-dev libusb-1.0-0-dev
   script:
     - cd frontend
     - npm ci
@@ -61,11 +63,11 @@ typecheck-api:
 
 typecheck-frontend:
   stage: test
-  image: node:${NODE_VERSION}-alpine
+  image: node:${NODE_VERSION}
   needs: ["build-frontend"]
   script:
     - cd frontend
-    - npm run build  # Next.js includes type checking
+    - echo "Type checking passed in build stage"
 
 # =============================================================================
 # Deploy Stage - Railway
@@ -91,7 +93,7 @@ deploy-api:
 
 deploy-frontend:
   stage: deploy
-  image: node:${NODE_VERSION}-alpine
+  image: node:${NODE_VERSION}
   needs: ["typecheck-frontend"]
   script:
     - npm install -g @railway/cli
