@@ -1,247 +1,175 @@
-import Knex from 'knex';
-import type { Knex as KnexType } from 'knex';
-import path from 'path';
-import { fileURLToPath } from 'url';
+import knex, { Knex } from 'knex';
 
-const __dirname = path.dirname(fileURLToPath(import.meta.url));
+let db: Knex | null = null;
 
 /**
- * Database configuration
- * 
- * Supports both SQLite (local/simple) and PostgreSQL (production/Railway)
- * 
- * Environment variables:
- * - DATABASE_URL: PostgreSQL connection string (takes precedence)
- * - DATABASE_PATH: SQLite file path (default: ./data/anw.db)
+ * Initialize database schema
  */
-
-function getConfig(): KnexType.Config {
-  // PostgreSQL if DATABASE_URL is set
-  if (process.env.DATABASE_URL) {
-    console.log('[Database] Using PostgreSQL');
-    return {
-      client: 'pg',
-      connection: process.env.DATABASE_URL,
-      pool: {
-        min: 2,
-        max: 10
-      },
-      migrations: {
-        tableName: 'knex_migrations'
-      }
-    };
+async function initSchema(db: Knex): Promise<void> {
+  // Subscribers table
+  const hasSubscribers = await db.schema.hasTable('subscribers');
+  if (!hasSubscribers) {
+    await db.schema.createTable('subscribers', (table) => {
+      table.string('id').primary();
+      table.string('wallet_address').nullable();
+      table.text('channels').notNullable(); // JSON array
+      table.decimal('balance', 20, 6).defaultTo(0);
+      table.integer('alerts_received').defaultTo(0);
+      table.boolean('on_chain').defaultTo(false);
+      table.timestamp('created_at').defaultTo(db.fn.now());
+      table.string('webhook_url').nullable();
+      table.index('wallet_address');
+    });
+    console.log('[Database] Created subscribers table');
   }
 
-  // SQLite as default (local development)
-  const dbPath = process.env.DATABASE_PATH || path.join(__dirname, '../../data/anw.db');
-  console.log(`[Database] Using SQLite at: ${dbPath}`);
-  
-  // Ensure data directory exists
-  const dbDir = path.dirname(dbPath);
-  import('fs').then(fs => {
-    if (!fs.existsSync(dbDir)) {
-      fs.mkdirSync(dbDir, { recursive: true });
-    }
-  });
+  // Alerts table
+  const hasAlerts = await db.schema.hasTable('alerts');
+  if (!hasAlerts) {
+    await db.schema.createTable('alerts', (table) => {
+      table.string('alert_id').primary();
+      table.string('channel').notNullable();
+      table.string('priority').notNullable();
+      table.timestamp('timestamp').notNullable();
+      table.text('headline').notNullable();
+      table.text('summary').notNullable();
+      table.text('entities'); // JSON array
+      table.text('tickers'); // JSON array
+      table.text('tokens'); // JSON array
+      table.string('source_url');
+      table.string('source_type');
+      table.string('sentiment').nullable();
+      table.integer('impact_score').nullable();
+      table.text('raw_data'); // JSON object
+      table.string('content_hash').unique();
+      table.string('publisher_id').nullable();
+      table.string('publisher_name').nullable();
+      table.index('channel');
+      table.index('timestamp');
+      table.index('publisher_id');
+    });
+    console.log('[Database] Created alerts table');
+  }
 
-  return {
-    client: 'better-sqlite3',
-    connection: {
-      filename: dbPath
-    },
-    useNullAsDefault: true,
-    migrations: {
-      tableName: 'knex_migrations'
-    }
-  };
+  // Alert hashes table (for deduplication)
+  const hasAlertHashes = await db.schema.hasTable('alert_hashes');
+  if (!hasAlertHashes) {
+    await db.schema.createTable('alert_hashes', (table) => {
+      table.string('hash').primary();
+      table.timestamp('created_at').defaultTo(db.fn.now());
+    });
+    console.log('[Database] Created alert_hashes table');
+  }
+
+  // Publishers table
+  const hasPublishers = await db.schema.hasTable('publishers');
+  if (!hasPublishers) {
+    await db.schema.createTable('publishers', (table) => {
+      table.string('id').primary();
+      table.string('name').notNullable().unique();
+      table.string('api_key_hash').notNullable();
+      table.string('api_key_prefix').notNullable();
+      table.text('channels').notNullable(); // JSON array
+      table.integer('alerts_published').defaultTo(0);
+      table.integer('alerts_consumed').defaultTo(0);
+      table.decimal('reputation_score', 5, 2).defaultTo(50);
+      table.string('status').defaultTo('active');
+      table.decimal('staked_amount', 20, 6).defaultTo(0);
+      table.boolean('on_chain').defaultTo(false);
+      table.timestamp('created_at').defaultTo(db.fn.now());
+      table.string('wallet_address').nullable();
+      table.index('status');
+      table.index('api_key_prefix');
+    });
+    console.log('[Database] Created publishers table');
+  }
 }
 
 /**
- * Database service using Knex
- * Supports SQLite (local) and PostgreSQL (production)
+ * Database singleton
  */
-class DatabaseService {
-  private _db: KnexType | null = null;
-  private _isPostgres: boolean = false;
-
+export const database = {
   /**
-   * Initialize database connection and create tables
+   * Get database connection (initializes if needed)
    */
-  async init(): Promise<KnexType> {
-    if (this._db) return this._db;
-
-    const config = getConfig();
-    this._isPostgres = config.client === 'pg';
-    this._db = Knex(config);
-
-    // Test connection
-    try {
-      await this._db.raw('SELECT 1');
-      console.log('[Database] Connection established');
-    } catch (err) {
-      console.error('[Database] Connection failed:', err);
-      throw err;
-    }
-
-    // Create tables
-    await this.createTables();
-    
-    console.log('[Database] Initialized successfully');
-    return this._db;
-  }
-
-  /**
-   * Get database instance (initializes if needed)
-   */
-  async get(): Promise<KnexType> {
-    if (!this._db) {
+  async get(): Promise<Knex> {
+    if (!db) {
       await this.init();
     }
-    return this._db!;
-  }
+    return db!;
+  },
 
   /**
-   * Get synchronous access (for backward compatibility)
-   * Note: Should migrate to async methods
+   * Initialize database connection and schema
    */
-  getSync(): KnexType {
-    if (!this._db) {
-      throw new Error('Database not initialized. Call init() first.');
-    }
-    return this._db;
-  }
+  async init(): Promise<void> {
+    if (db) return;
 
-  /**
-   * Check if using PostgreSQL
-   */
-  isPostgres(): boolean {
-    return this._isPostgres;
-  }
-
-  /**
-   * Create all tables
-   */
-  private async createTables() {
-    const db = this._db!;
-
-    // Subscribers table
-    if (!(await db.schema.hasTable('subscribers'))) {
-      await db.schema.createTable('subscribers', (table) => {
-        table.string('id').primary();
-        table.string('wallet_address').unique().nullable();
-        table.text('channels').notNullable(); // JSON array
-        table.string('webhook_url').nullable();
-        table.string('created_at').notNullable();
-        table.float('balance').defaultTo(0);
-        table.integer('alerts_received').defaultTo(0);
-        table.boolean('active').defaultTo(true);
-        table.boolean('on_chain').defaultTo(false);
-        
-        table.index('wallet_address');
-        table.index('active');
-      });
-      console.log('[Database] Created subscribers table');
+    const databaseUrl = process.env.DATABASE_URL;
+    
+    let config: Knex.Config;
+    if (databaseUrl) {
+      console.log('[Database] Using PostgreSQL');
+      config = {
+        client: 'pg',
+        connection: databaseUrl,
+        pool: { min: 2, max: 10 },
+        migrations: { tableName: 'knex_migrations' }
+      };
+    } else {
+      // Fallback to SQLite for local development
+      const path = await import('path');
+      const fs = await import('fs');
+      const dataDir = path.join(process.cwd(), 'data');
+      if (!fs.existsSync(dataDir)) {
+        fs.mkdirSync(dataDir, { recursive: true });
+      }
+      const dbPath = path.join(dataDir, 'anw.db');
+      console.log(`[Database] Using SQLite at: ${dbPath}`);
+      
+      config = {
+        client: 'better-sqlite3',
+        connection: { filename: dbPath },
+        useNullAsDefault: true
+      };
     }
 
-    // Alerts table
-    if (!(await db.schema.hasTable('alerts'))) {
-      await db.schema.createTable('alerts', (table) => {
-        table.string('alert_id').primary();
-        table.string('channel').notNullable();
-        table.string('priority').notNullable();
-        table.string('timestamp').notNullable();
-        table.string('headline').notNullable();
-        table.text('summary').notNullable();
-        table.text('entities').notNullable(); // JSON array
-        table.text('tickers').notNullable(); // JSON array
-        table.text('tokens').notNullable(); // JSON array
-        table.string('source_url').notNullable();
-        table.string('source_type').notNullable();
-        table.string('sentiment').nullable();
-        table.float('impact_score').nullable();
-        table.text('raw_data').nullable(); // JSON object
-        table.string('publisher_id').nullable();
-        table.string('publisher_name').nullable();
-        table.string('hash').unique().nullable();
-        
-        table.index('channel');
-        table.index('timestamp');
-        table.index('publisher_id');
-      });
-      console.log('[Database] Created alerts table');
-    }
+    db = knex(config);
+    
+    // Test connection
+    await db.raw('SELECT 1');
+    console.log('[Database] Connection established');
 
-    // Publishers table
-    if (!(await db.schema.hasTable('publishers'))) {
-      await db.schema.createTable('publishers', (table) => {
-        table.string('id').primary();
-        table.string('name').unique().notNullable();
-        table.text('description').nullable();
-        table.string('wallet_address').nullable();
-        table.string('api_key').notNullable(); // Hashed
-        table.string('api_key_prefix').notNullable();
-        table.text('channels').notNullable(); // JSON array
-        table.string('status').defaultTo('active');
-        table.string('created_at').notNullable();
-        table.integer('alerts_published').defaultTo(0);
-        table.integer('alerts_consumed').defaultTo(0);
-        table.float('reputation_score').defaultTo(50);
-        table.float('stake').defaultTo(0);
-        table.boolean('on_chain').defaultTo(false);
-        table.string('publisher_pda').nullable();
-        
-        table.index('api_key_prefix');
-        table.index('status');
-      });
-      console.log('[Database] Created publishers table');
-    }
-
-    // Alert hashes for deduplication
-    if (!(await db.schema.hasTable('alert_hashes'))) {
-      await db.schema.createTable('alert_hashes', (table) => {
-        table.string('hash').primary();
-        table.string('alert_id').notNullable();
-        table.string('created_at').notNullable();
-      });
-      console.log('[Database] Created alert_hashes table');
-    }
-  }
+    // Initialize schema
+    await initSchema(db);
+    console.log('[Database] Initialized successfully');
+  },
 
   /**
    * Close database connection
    */
-  async close() {
-    if (this._db) {
-      await this._db.destroy();
-      this._db = null;
+  async close(): Promise<void> {
+    if (db) {
+      await db.destroy();
+      db = null;
       console.log('[Database] Connection closed');
     }
-  }
+  },
 
   /**
-   * Get database stats
+   * Get stats
    */
   async stats() {
-    const db = await this.get();
-    
-    const [subscribers] = await db('subscribers').count('* as count');
-    const [alerts] = await db('alerts').count('* as count');
-    const [publishers] = await db('publishers').count('* as count');
-    
+    const conn = await this.get();
+    const [subscribers, alerts, publishers] = await Promise.all([
+      conn('subscribers').count('* as count').first(),
+      conn('alerts').count('* as count').first(),
+      conn('publishers').count('* as count').first()
+    ]);
     return {
-      subscribers: Number(subscribers.count),
-      alerts: Number(alerts.count),
-      publishers: Number(publishers.count),
-      type: this._isPostgres ? 'postgresql' : 'sqlite'
+      subscribers: Number(subscribers?.count || 0),
+      alerts: Number(alerts?.count || 0),
+      publishers: Number(publishers?.count || 0)
     };
   }
-}
-
-// Singleton instance
-export const database = new DatabaseService();
-
-// Initialize on import (async)
-database.init().catch(err => {
-  console.error('[Database] Failed to initialize:', err);
-  process.exit(1);
-});
+};

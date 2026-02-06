@@ -1,5 +1,5 @@
 # Agent News Wire - GitLab CI/CD Pipeline
-# Builds, tests, and deploys API and Frontend
+# Builds, tests, and deploys to Railway
 
 stages:
   - build
@@ -7,30 +7,15 @@ stages:
   - deploy
 
 variables:
-  # Docker registry (GitLab Container Registry)
-  DOCKER_REGISTRY: $CI_REGISTRY
-  API_IMAGE: $CI_REGISTRY_IMAGE/api
-  FRONTEND_IMAGE: $CI_REGISTRY_IMAGE/frontend
-  # Node version
-  NODE_VERSION: "22"
-
-# Cache node_modules between jobs
-.node_cache: &node_cache
-  cache:
-    key: ${CI_COMMIT_REF_SLUG}
-    paths:
-      - api/node_modules/
-      - frontend/node_modules/
-    policy: pull-push
+  NODE_VERSION: "20"
 
 # =============================================================================
-# BUILD STAGE
+# Build Stage
 # =============================================================================
 
-build:api:
+build-api:
   stage: build
   image: node:${NODE_VERSION}-alpine
-  <<: *node_cache
   script:
     - cd api
     - npm ci
@@ -38,16 +23,16 @@ build:api:
   artifacts:
     paths:
       - api/dist/
+      - api/node_modules/
     expire_in: 1 hour
-  rules:
-    - changes:
-        - api/**/*
-        - .gitlab-ci.yml
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-api
+    paths:
+      - api/node_modules/
 
-build:frontend:
+build-frontend:
   stage: build
   image: node:${NODE_VERSION}-alpine
-  <<: *node_cache
   script:
     - cd frontend
     - npm ci
@@ -55,170 +40,89 @@ build:frontend:
   artifacts:
     paths:
       - frontend/.next/
+      - frontend/node_modules/
     expire_in: 1 hour
-  rules:
-    - changes:
-        - frontend/**/*
-        - .gitlab-ci.yml
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}-frontend
+    paths:
+      - frontend/node_modules/
 
 # =============================================================================
-# TEST STAGE
+# Test Stage
 # =============================================================================
 
-test:api:
+typecheck-api:
   stage: test
   image: node:${NODE_VERSION}-alpine
-  <<: *node_cache
-  needs:
-    - build:api
+  needs: ["build-api"]
   script:
     - cd api
-    - npm ci
-    # Run type checking
-    - npm run build
-    # Add tests here when available
-    # - npm test
-  rules:
-    - changes:
-        - api/**/*
-        - .gitlab-ci.yml
+    - npm run build  # TypeScript type checking
 
-lint:frontend:
+typecheck-frontend:
   stage: test
   image: node:${NODE_VERSION}-alpine
-  <<: *node_cache
-  needs:
-    - build:frontend
+  needs: ["build-frontend"]
   script:
     - cd frontend
-    - npm ci
-    # Run lint if configured
-    - npm run lint || true
-  rules:
-    - changes:
-        - frontend/**/*
-        - .gitlab-ci.yml
-  allow_failure: true
+    - npm run build  # Next.js includes type checking
 
 # =============================================================================
-# DOCKER BUILD (optional - for container registry)
+# Deploy Stage - Railway
 # =============================================================================
-# These jobs push to GitLab Container Registry.
-# Only needed if deploying via Docker images (not needed for Railway CLI).
 
-docker:api:
+deploy-api:
   stage: deploy
-  image: docker:24
-  services:
-    - docker:24-dind
-  needs:
-    - build:api
-    - test:api
-  before_script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  image: node:${NODE_VERSION}-alpine
+  needs: ["typecheck-api"]
   script:
+    - npm install -g @railway/cli
     - cd api
-    - docker build -t $API_IMAGE:$CI_COMMIT_SHA -t $API_IMAGE:latest .
-    - docker push $API_IMAGE:$CI_COMMIT_SHA
-    - docker push $API_IMAGE:latest
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main" && $BUILD_DOCKER_IMAGES == "true"
-  when: manual
-
-docker:frontend:
-  stage: deploy
-  image: docker:24
-  services:
-    - docker:24-dind
-  needs:
-    - build:frontend
-  before_script:
-    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
-  script:
-    - cd frontend
-    - docker build -t $FRONTEND_IMAGE:$CI_COMMIT_SHA -t $FRONTEND_IMAGE:latest .
-    - docker push $FRONTEND_IMAGE:$CI_COMMIT_SHA
-    - docker push $FRONTEND_IMAGE:latest
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main" && $BUILD_DOCKER_IMAGES == "true"
-  when: manual
-
-# =============================================================================
-# DEPLOY TO RAILWAY (via CLI - works with GitLab)
-# =============================================================================
-# 
-# Setup:
-# 1. Create Railway project at railway.app
-# 2. Create two services: "api" and "frontend" 
-# 3. Add volume to api service mounted at /app/data
-# 4. Get token from Railway Account Settings → Tokens
-# 5. Add RAILWAY_TOKEN to GitLab CI/CD variables
-#
-# The pipeline will auto-deploy on push to main.
-
-deploy:railway:api:
-  stage: deploy
-  image: node:${NODE_VERSION}-alpine
-  needs:
-    - build:api
-    - test:api
-  before_script:
-    - apk add --no-cache curl
-    - npm install -g @railway/cli
-  script:
-    - cd api
-    - RAILWAY_TOKEN=$RAILWAY_TOKEN railway up --service api --detach
-  environment:
-    name: production-api
-    url: https://$RAILWAY_API_DOMAIN
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main" && $RAILWAY_TOKEN != null
-      changes:
-        - api/**/*
-        - .gitlab-ci.yml
-
-deploy:railway:frontend:
-  stage: deploy
-  image: node:${NODE_VERSION}-alpine
-  needs:
-    - build:frontend
-  before_script:
-    - apk add --no-cache curl
-    - npm install -g @railway/cli
-  script:
-    - cd frontend
-    - RAILWAY_TOKEN=$RAILWAY_TOKEN railway up --service frontend --detach
-  environment:
-    name: production-frontend
-    url: https://$RAILWAY_FRONTEND_DOMAIN
-  rules:
-    - if: $CI_COMMIT_BRANCH == "main" && $RAILWAY_TOKEN != null
-      changes:
-        - frontend/**/*
-        - .gitlab-ci.yml
-
-# Manual full deploy (both services)
-deploy:railway:all:
-  stage: deploy
-  image: node:${NODE_VERSION}-alpine
-  needs:
-    - build:api
-    - build:frontend
-  before_script:
-    - apk add --no-cache curl
-    - npm install -g @railway/cli
-  script:
-    - cd api && RAILWAY_TOKEN=$RAILWAY_TOKEN railway up --service api --detach
-    - cd ../frontend && RAILWAY_TOKEN=$RAILWAY_TOKEN railway up --service frontend --detach
+    - railway up --service api --detach
   environment:
     name: production
+    url: https://$RAILWAY_API_DOMAIN
   rules:
-    - if: $CI_COMMIT_BRANCH == "main" && $RAILWAY_TOKEN != null
-  when: manual
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+  variables:
+    RAILWAY_TOKEN: $RAILWAY_TOKEN
+    RAILWAY_PROJECT_ID: $RAILWAY_PROJECT_ID
+
+deploy-frontend:
+  stage: deploy
+  image: node:${NODE_VERSION}-alpine
+  needs: ["typecheck-frontend"]
+  script:
+    - npm install -g @railway/cli
+    - cd frontend
+    - railway up --service frontend --detach
+  environment:
+    name: production
+    url: https://$RAILWAY_FRONTEND_DOMAIN
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      when: manual
+  variables:
+    RAILWAY_TOKEN: $RAILWAY_TOKEN
+    RAILWAY_PROJECT_ID: $RAILWAY_PROJECT_ID
 
 # =============================================================================
-# DEPLOY TO RENDER (Alternative - uses render.yaml)
+# Auto-deploy on main (optional - enable by removing 'when: manual')
 # =============================================================================
 
-# Render auto-deploys from the repo if render.yaml is present
-# No CI job needed - just connect repo to Render and push to main
+# deploy-all:
+#   stage: deploy
+#   image: node:${NODE_VERSION}-alpine
+#   needs: ["typecheck-api", "typecheck-frontend"]
+#   script:
+#     - npm install -g @railway/cli
+#     - cd api && railway up --service api --detach
+#     - cd ../frontend && railway up --service frontend --detach
+#   environment:
+#     name: production
+#   rules:
+#     - if: $CI_COMMIT_BRANCH == "main"
+#   variables:
+#     RAILWAY_TOKEN: $RAILWAY_TOKEN
+#     RAILWAY_PROJECT_ID: $RAILWAY_PROJECT_ID
