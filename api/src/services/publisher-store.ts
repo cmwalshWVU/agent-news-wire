@@ -8,7 +8,7 @@ interface PublisherRow {
   name: string;
   description: string | null;
   wallet_address: string | null;
-  api_key: string;
+  api_key_hash: string;
   api_key_prefix: string;
   channels: string;
   status: string;
@@ -39,10 +39,10 @@ export class PublisherStore {
     
     const db = await database.get();
     const rows = await db('publishers')
-      .select('id', 'name', 'api_key', 'wallet_address');
+      .select('id', 'name', 'api_key_hash', 'wallet_address');
 
     for (const row of rows) {
-      this.apiKeyCache.set(row.api_key, row.id);
+      this.apiKeyCache.set(row.api_key_hash, row.id);
       this.nameCache.set(row.name.toLowerCase(), row.id);
       if (row.wallet_address) {
         this.walletCache.set(row.wallet_address, row.id);
@@ -62,7 +62,7 @@ export class PublisherStore {
       name: row.name,
       description: row.description || undefined,
       walletAddress: row.wallet_address || undefined,
-      apiKey: row.api_key,
+      apiKey: row.api_key_hash,
       apiKeyPrefix: row.api_key_prefix,
       channels: JSON.parse(row.channels) as Channel[],
       status: row.status as PublisherStatus,
@@ -133,9 +133,8 @@ export class PublisherStore {
     await db('publishers').insert({
       id: publisher.id,
       name: publisher.name,
-      description: publisher.description || null,
       wallet_address: publisher.walletAddress || null,
-      api_key: publisher.apiKey,
+      api_key_hash: publisher.apiKey,
       api_key_prefix: publisher.apiKeyPrefix,
       channels: JSON.stringify(publisher.channels),
       status: publisher.status,
@@ -144,8 +143,7 @@ export class PublisherStore {
       alerts_consumed: publisher.alertsConsumed,
       reputation_score: publisher.reputationScore,
       staked_amount: publisher.stake,
-      on_chain: publisher.onChain,
-      publisher_pda: publisher.publisherPDA || null
+      on_chain: publisher.onChain
     });
 
     // Update caches
