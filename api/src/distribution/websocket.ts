@@ -1,6 +1,6 @@
 import { WebSocket } from 'ws';
 import { Alert, Channel } from '../types/index.js';
-import { subscriptionStore } from '../services/index.js';
+import { subscriptionStore, alertStore } from '../services/index.js';
 import { getEffectiveConfig, TRIAL_MODE } from '../config/trial.js';
 
 interface WebSocketClient {
@@ -54,6 +54,36 @@ export class AlertDistributor {
       console.error(`[WS] Client error (${subscriberId}):`, error);
       this.clients.delete(subscriberId);
     });
+
+    // Backfill recent alerts for subscribed channels
+    this.sendRecentAlerts(client);
+  }
+
+  /**
+   * Send recent alerts to a newly connected client (backfill)
+   */
+  private sendRecentAlerts(client: WebSocketClient, limit = 10) {
+    const recentAlerts = alertStore.getRecent(100);
+    let sent = 0;
+
+    for (const alert of recentAlerts) {
+      if (sent >= limit) break;
+      
+      // Only send alerts matching client's subscribed channels
+      if (!client.channels.has(alert.channel)) continue;
+
+      this.sendToClient(client, {
+        type: 'alert',
+        alert,
+        charged: 0, // Backfill is free
+        backfill: true
+      });
+      sent++;
+    }
+
+    if (sent > 0) {
+      console.log(`[WS] Sent ${sent} backfill alerts to ${client.subscriberId}`);
+    }
   }
 
   /**
@@ -83,14 +113,19 @@ export class AlertDistributor {
    * Distribute an alert to all subscribed clients
    */
   async distribute(alert: Alert) {
+    console.log(`[WS] distribute() called with alert: ${alert.alertId} (channel: ${alert.channel})`);
+    console.log(`[WS] Connected clients: ${this.clients.size}`);
+    
     const recipients: string[] = [];
     const config = getEffectiveConfig();
     const pricePerAlert = config.pricePerAlert;
 
-    // Debug: log distribution attempt
-    if (this.clients.size > 0) {
-      console.log(`[WS] Distributing alert ${alert.alertId} (channel: ${alert.channel}) to ${this.clients.size} connected client(s)`);
+    if (this.clients.size === 0) {
+      console.log(`[WS] No connected clients - alert not delivered`);
+      return recipients;
     }
+
+    console.log(`[WS] Distributing alert ${alert.alertId} (channel: ${alert.channel}) to ${this.clients.size} connected client(s)`);
 
     for (const [subscriberId, client] of this.clients) {
       // Check if client is subscribed to this channel

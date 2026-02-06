@@ -118,8 +118,10 @@ export async function fetchWhaleAlerts(apiKey?: string): Promise<AlertInput[]> {
 
 /**
  * Generate mock whale alerts for demo purposes
+ * Each call generates unique alerts with timestamps to avoid deduplication
  */
 export function generateMockWhaleAlerts(): AlertInput[] {
+  const now = Date.now();
   const mockTransactions = [
     {
       symbol: 'BTC',
@@ -163,19 +165,27 @@ export function generateMockWhaleAlerts(): AlertInput[] {
     }
   ];
 
-  return mockTransactions.map(tx => {
+  // Pick 1-2 random transactions to simulate real-time activity
+  const shuffled = mockTransactions.sort(() => Math.random() - 0.5);
+  const selected = shuffled.slice(0, Math.floor(Math.random() * 2) + 1);
+
+  return selected.map((tx, idx) => {
     const isExchangeOutflow = ['Coinbase', 'Binance', 'Kraken', 'Bitstamp'].includes(tx.from);
     const sentiment = isExchangeOutflow ? 'bullish' : 'bearish';
+    // Vary the amount slightly to make each alert unique
+    const variance = 0.9 + Math.random() * 0.2; // 90-110%
+    const variedAmount = Math.floor(tx.amount * variance);
+    const variedUsd = Math.floor(tx.amount_usd * variance);
     
     return {
       channel: 'markets/whale-movements' as const,
       priority: 'high' as const,
-      headline: `🐋 ${formatAmount(tx.amount, tx.symbol)} ($${(tx.amount_usd / 1_000_000).toFixed(0)}M) moved: ${tx.from} → ${tx.to}`,
+      headline: `🐋 ${formatAmount(variedAmount, tx.symbol)} ($${(variedUsd / 1_000_000).toFixed(0)}M) moved: ${tx.from} → ${tx.to}`,
       summary: `${tx.blockchain.toUpperCase()} whale transfer detected.`,
       entities: [tx.from, tx.to],
       tickers: [],
       tokens: [tx.symbol],
-      sourceUrl: `https://whale-alert.io/transaction/${tx.blockchain}/mock`,
+      sourceUrl: `https://whale-alert.io/transaction/${tx.blockchain}/${now}-${idx}`,
       sourceType: 'on_chain' as const,
       sentiment,
       impactScore: 7,

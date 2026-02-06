@@ -78,10 +78,12 @@ export class IngestionEngine {
    * Process alerts through the pipeline
    */
   private async processAlerts(alerts: Alert[]) {
+    console.log(`[Ingestion] processAlerts called with ${alerts.length} alert(s), ${this.handlers.length} handler(s) registered`);
     for (const alert of alerts) {
       // Notify all handlers
       for (const handler of this.handlers) {
         try {
+          console.log(`[Ingestion] Calling handler for alert: ${alert.alertId}`);
           await handler(alert);
         } catch (error) {
           console.error('[Ingestion] Handler error:', error);
