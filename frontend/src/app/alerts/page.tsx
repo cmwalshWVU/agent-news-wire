@@ -57,9 +57,27 @@ export default function AlertsPage() {
       let subscriberId = localStorage.getItem('anw-subscriber-id');
       
       if (!subscriberId) {
-        // Create a new subscription
+        // Create a new subscription with all available channels
+        const allChannels = [
+          'regulatory/sec',
+          'regulatory/cftc',
+          'regulatory/global',
+          'institutional/banks',
+          'institutional/asset-managers',
+          'defi/yields',
+          'defi/hacks',
+          'defi/protocols',
+          'rwa/tokenization',
+          'networks/solana',
+          'networks/ethereum',
+          'networks/hedera',
+          'networks/ripple',
+          'networks/bitcoin',
+          'markets/whale-movements',
+          'markets/liquidations'
+        ];
         try {
-          const res = await createSubscription(['all']);
+          const res = await createSubscription(allChannels);
           subscriberId = res.subscriber.id;
           localStorage.setItem('anw-subscriber-id', subscriberId);
           console.log('[Alerts] Created new subscription:', subscriberId);

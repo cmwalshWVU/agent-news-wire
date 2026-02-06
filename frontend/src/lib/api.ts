@@ -202,7 +202,8 @@ export function createAlertWebSocket(
     try {
       const msg = JSON.parse(event.data);
       if (msg.type === 'alert') {
-        onAlert(msg.data);
+        // Backend sends alert data as 'alert' or 'data'
+        onAlert(msg.alert || msg.data);
       } else if (msg.type === 'error') {
         onError?.(msg.message);
       }
