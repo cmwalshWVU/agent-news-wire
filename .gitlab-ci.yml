@@ -85,7 +85,7 @@ deploy-api:
     - export RAILWAY_PROJECT_ID="$RAILWAY_PROJECT_ID"
     - echo "Token prefix ${RAILWAY_TOKEN:0:8}, Project ID $RAILWAY_PROJECT_ID"
     - npm install -g @railway/cli
-    - cd api && railway up --service api -e production -d
+    - railway up --service api -e production -d
   environment:
     name: production
   rules:
@@ -104,7 +104,7 @@ deploy-frontend:
     - export RAILWAY_PROJECT_ID="$RAILWAY_PROJECT_ID"
     - echo "Token prefix ${RAILWAY_TOKEN:0:8}, Project ID $RAILWAY_PROJECT_ID"
     - npm install -g @railway/cli
-    - cd frontend && railway up --service frontend -e production -d
+    - railway up --service frontend -e production -d
   environment:
     name: production
   rules:
