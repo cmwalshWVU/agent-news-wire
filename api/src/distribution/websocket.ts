@@ -82,6 +82,11 @@ export class AlertDistributor {
     }
 
     if (sent > 0) {
+      // Increment alertsReceived for backfill alerts too
+      // This is batched as a single increment for efficiency
+      for (let i = 0; i < sent; i++) {
+        subscriptionStore.incrementAlertsReceived(client.subscriberId);
+      }
       console.log(`[WS] Sent ${sent} backfill alerts to ${client.subscriberId}`);
     }
   }
