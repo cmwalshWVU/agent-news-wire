@@ -1,7 +1,7 @@
 # Agent News Wire - TODO List
 
 **Created:** 2026-02-03  
-**Last Updated:** 2026-02-06 16:42 UTC
+**Last Updated:** 2026-02-06 21:00 UTC
 
 ---
 
@@ -32,7 +32,7 @@
 - [x] PDA lookup endpoint
 - [x] Trial mode configuration
 
-### Web Frontend (NEW!)
+### Web Frontend
 - [x] Next.js 14 project setup
 - [x] Tailwind CSS configuration
 - [x] Wallet adapter integration
@@ -44,11 +44,29 @@
 - [x] Alert card component
 - [x] Header with navigation
 - [x] Production build successful
-- [x] Dashboard: Connect wallet CTA for non-connected users ✅ 2026-02-06
-- [x] Dashboard: Channel bitmap decoder utility ✅ 2026-02-06
-- [x] Dashboard: Display subscribed channels with badges ✅ 2026-02-06
-- [x] Dashboard: Clear state on wallet disconnect ✅ 2026-02-06
-- [x] Dashboard: Three distinct states (disconnected/connected/subscribed) ✅ 2026-02-06
+- [x] Dashboard: Connect wallet CTA for non-connected users
+- [x] Dashboard: Channel bitmap decoder utility
+- [x] Dashboard: Display subscribed channels with badges
+- [x] Dashboard: Clear state on wallet disconnect
+- [x] Dashboard: Three distinct states (disconnected/connected/subscribed)
+
+### Database & Persistence ✅ COMPLETE (2026-02-06)
+- [x] PostgreSQL support for production (Railway)
+- [x] SQLite fallback for local development
+- [x] Schema design for subscriptions, alerts, publishers
+- [x] Migrate subscription-store.ts to async database
+- [x] Migrate alert-store.ts to async database
+- [x] Migrate publisher-store.ts to async database
+- [x] Data persists across server restarts
+- [x] Auto-migration for schema changes
+
+### Cloud Deployment ✅ COMPLETE (2026-02-06)
+- [x] Railway deployment (API + Frontend + Postgres)
+- [x] GitLab CI/CD pipeline with manual deploy triggers
+- [x] Nixpacks configuration for both services
+- [x] Environment variable configuration
+- [x] Health check endpoints (/api/health, /api/ready)
+- [x] Production URLs configured and working
 
 ---
 
@@ -56,7 +74,7 @@
 
 ### End-to-End Testing
 - [x] Create subscriber on-chain ✅
-- [x] Fix: Subscriber vault now created with subscriber ✅ (2026-02-05)
+- [x] Fix: Subscriber vault now created with subscriber ✅
 - [ ] Deposit USDC using deposit-tx (needs devnet USDC)
 - [ ] Connect WebSocket, receive alerts
 - [ ] Verify balance deductions on-chain
@@ -65,35 +83,7 @@
 
 ## 🔴 High Priority (This Week)
 
-### Database & Persistence ✅ COMPLETE (2026-02-06)
-- [x] Add SQLite for subscription persistence
-- [x] Schema design for subscriptions, alerts, publishers
-- [x] Migrate subscription-store.ts to use SQLite
-- [x] Migrate alert-store.ts to use SQLite  
-- [x] Migrate publisher-store.ts to use SQLite
-- [x] Data persists across server restarts
-
-### Docker & Local Setup ✅ COMPLETE (2026-02-06)
-- [x] Dockerize API server
-- [x] Dockerize frontend (Next.js)
-- [x] Docker Compose for local development
-- [x] Volume mounting for data persistence
-
-### Cloud Deployment & CI/CD ✅ COMPLETE (2026-02-06)
-- [x] GitLab CI/CD pipeline (.gitlab-ci.yml)
-  - Build stage: API and Frontend
-  - Test stage: Type checking, linting
-  - Deploy stage: Docker image build and push
-  - Manual Railway deployment trigger
-- [x] Render blueprint (render.yaml) for one-click deploy
-- [x] Railway configuration (railway.json)
-- [x] Environment variable templates (.env.example)
-- [x] Enhanced health check endpoint (/api/health, /api/ready)
-- [x] Comprehensive deployment documentation (docs/DEPLOYMENT.md)
-
 ### Data Sources
-- [x] Add CFTC RSS feed (`regulatory/cftc` channel) ✅ 2026-02-05
-- [x] Add Rekt News / DeFiLlama Hacks (`defi/hacks` channel) ✅ 2026-02-05
 - [ ] Integrate real Whale Alert API (get API key)
 - [ ] Add Helius webhooks for Solana on-chain events
 
@@ -103,10 +93,11 @@
 - [ ] Add request logging
 
 ### Publisher System
-- [ ] Create `POST /api/publish` endpoint
-- [ ] Publisher registration flow
+- [x] Publisher registration endpoint exists
+- [x] Publisher authentication with API keys
 - [ ] Alert validation/moderation logic
 - [ ] Revenue tracking per publisher
+- [ ] Publisher dashboard in frontend
 
 ---
 
@@ -151,6 +142,7 @@
 - [ ] Monitoring/alerting (Datadog, Sentry, etc.)
 - [ ] Health check dashboard
 - [ ] Log aggregation (structured JSON logs)
+- [ ] Custom domain setup
 
 ### API Features
 - [ ] Full-text search for alerts
@@ -181,6 +173,12 @@
 
 ## 📋 Quick Reference
 
+### Production URLs
+```
+API:      https://api-production-5669.up.railway.app
+Frontend: (your frontend URL)
+```
+
 ### Program Addresses (Devnet)
 ```
 SubscriptionRegistry: H18zPB6sm7THZbBBtayAyjtQnfRvwN7E72Kxnomd2TVJ
@@ -202,17 +200,16 @@ frontend/src/lib/api.ts                 → API client
 
 ### Run Commands
 ```bash
-# API Server
-cd api && npm run dev
+# Local Development
+cd api && npm run dev          # API on :3000
+cd frontend && npm run dev     # Frontend on :3001
 
-# Frontend (use different port if API on 3000)
-cd frontend && PORT=3001 npm run dev
+# Deploy to Railway (via GitLab CI)
+git push origin main           # Triggers build
+# Then manually trigger deploy jobs in GitLab CI/CD
 
 # SDK Build
 cd sdk && npm run build
-
-# Programs (use v1.52 for edition2024)
-cargo-build-sbf --tools-version v1.52 --manifest-path <program>/Cargo.toml
 ```
 
 ---
@@ -221,14 +218,15 @@ cargo-build-sbf --tools-version v1.52 --manifest-path <program>/Cargo.toml
 
 | Category | Done | Total | % |
 |----------|------|-------|---|
-| Frontend | 14 | 14 | 100% |
-| API | 15 | 17 | 88% |
+| Frontend | 15 | 20 | 75% |
+| API + Database | 18 | 20 | 90% |
 | Data Sources | 6 | 10 | 60% |
 | Smart Contracts | 22 | 23 | 96% |
-| Publisher | 0 | 5 | 0% |
+| Cloud Deploy | 6 | 6 | 100% |
+| Publisher | 2 | 5 | 40% |
 | SDK | 9 | 10 | 90% |
-| Documentation | 6 | 8 | 75% |
-| **Overall** | **72** | **87** | **83%** |
+| Documentation | 6 | 10 | 60% |
+| **Overall** | **84** | **104** | **81%** |
 
 ---
 
