@@ -1,6 +1,9 @@
 # Agent News Wire Frontend - Dockerfile
 FROM node:22-alpine AS builder
 
+# Install build dependencies for native modules (usb)
+RUN apk add --no-cache python3 make g++ linux-headers eudev-dev
+
 WORKDIR /app
 
 # Copy package files
