@@ -14,6 +14,7 @@
 | [OVERVIEW.md](../OVERVIEW.md) | Project vision and core concepts |
 | [ARCHITECTURE.md](../ARCHITECTURE.md) | System architecture and design decisions |
 | [API-REFERENCE.md](../API-REFERENCE.md) | Complete API endpoint documentation |
+| [AGENT-INTEGRATION.md](./AGENT-INTEGRATION.md) | **How agents subscribe and receive alerts** |
 | [DATA-SOURCES.md](../DATA-SOURCES.md) | Data collection strategy and sources |
 | [ECONOMICS.md](../ECONOMICS.md) | Pricing model and token economics |
 

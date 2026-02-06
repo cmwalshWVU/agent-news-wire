@@ -239,6 +239,16 @@ export class SubscriptionStore {
   }
 
   /**
+   * Increment alerts received counter (for trial mode)
+   */
+  incrementAlertsReceived(id: string): boolean {
+    const subscriber = this.subscribers.get(id);
+    if (!subscriber) return false;
+    subscriber.alertsReceived++;
+    return true;
+  }
+
+  /**
    * Deactivate subscription
    */
   unsubscribe(id: string): boolean {

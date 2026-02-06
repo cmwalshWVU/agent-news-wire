@@ -1,15 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { 
   Bell, Users, DollarSign, Activity, RefreshCw, 
-  ExternalLink, Zap, Wallet, AlertCircle, Plus
+  ExternalLink, Zap, Wallet, AlertCircle, Plus,
+  Radio, WifiOff, Wifi
 } from 'lucide-react';
-import { fetchStats, fetchAlerts, getPDAInfo, type Stats, type Alert, type PDAInfo } from '@/lib/api';
+import { fetchStats, fetchAlerts, getPDAInfo, createSubscription, type Stats, type Alert, type PDAInfo } from '@/lib/api';
 import { decodeChannelBitmap, getChannelShortName, getCategoryColor } from '@/lib/channels';
+import { useAlertWebSocket } from '@/hooks/useAlertWebSocket';
 import { AlertCard } from '@/components/AlertCard';
+import { toast } from 'sonner';
 
 export default function DashboardPage() {
   const { publicKey, connected, connecting } = useWallet();
@@ -19,11 +22,68 @@ export default function DashboardPage() {
   const [pdaInfo, setPdaInfo] = useState<PDAInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [subscriberId, setSubscriberId] = useState<string | null>(null);
+  const [liveAlerts, setLiveAlerts] = useState<Alert[]>([]);
   
   // Decode channels from bitmap
   const subscribedChannels = pdaInfo?.subscriber?.channels 
     ? decodeChannelBitmap(pdaInfo.subscriber.channels)
     : [];
+
+  // Handle incoming live alerts
+  const handleLiveAlert = useCallback((alert: Alert) => {
+    setLiveAlerts(prev => [alert, ...prev].slice(0, 20));
+    toast.success(`New Alert: ${alert.headline.slice(0, 50)}...`, {
+      description: alert.channel,
+      duration: 5000,
+    });
+  }, []);
+
+  // WebSocket connection for live alerts
+  const { 
+    connected: wsConnected, 
+    connecting: wsConnecting, 
+    error: wsError,
+    alertsReceived: wsAlertsReceived,
+    connect: wsConnect,
+    disconnect: wsDisconnect,
+  } = useAlertWebSocket({
+    subscriberId,
+    onAlert: handleLiveAlert,
+    onConnect: () => toast.success('Live alerts connected!'),
+    onDisconnect: () => toast.info('Live alerts disconnected'),
+    autoConnect: false, // We'll manually connect after creating subscription
+  });
+
+  // Create API subscription when user has on-chain subscription
+  const setupSubscription = useCallback(async () => {
+    if (!publicKey || !pdaInfo?.existsOnChain || subscriberId) return;
+    
+    try {
+      // Create an API subscription linked to this wallet
+      const result = await createSubscription(subscribedChannels, publicKey.toBase58());
+      if (result.success) {
+        setSubscriberId(result.subscriber.id);
+        console.log('[Dashboard] Created API subscription:', result.subscriber.id);
+      }
+    } catch (err) {
+      console.error('[Dashboard] Failed to create API subscription:', err);
+    }
+  }, [publicKey, pdaInfo?.existsOnChain, subscribedChannels, subscriberId]);
+
+  // Auto-connect WebSocket when we have a subscriber ID
+  useEffect(() => {
+    if (subscriberId && !wsConnected && !wsConnecting) {
+      wsConnect();
+    }
+  }, [subscriberId, wsConnected, wsConnecting, wsConnect]);
+
+  // Setup subscription when on-chain subscription is detected
+  useEffect(() => {
+    if (pdaInfo?.existsOnChain && subscribedChannels.length > 0) {
+      setupSubscription();
+    }
+  }, [pdaInfo?.existsOnChain, subscribedChannels.length, setupSubscription]);
 
   const loadData = async () => {
     try {
@@ -57,12 +117,15 @@ export default function DashboardPage() {
     setRefreshing(false);
   };
 
-  // Clear pdaInfo when wallet disconnects
+  // Clear state when wallet disconnects
   useEffect(() => {
     if (!publicKey) {
       setPdaInfo(null);
+      setSubscriberId(null);
+      setLiveAlerts([]);
+      wsDisconnect();
     }
-  }, [publicKey]);
+  }, [publicKey, wsDisconnect]);
   
   // Load data on mount and when wallet changes
   useEffect(() => {
@@ -70,6 +133,11 @@ export default function DashboardPage() {
     const interval = setInterval(loadData, 30000); // Refresh every 30s
     return () => clearInterval(interval);
   }, [publicKey]);
+
+  // Combine live alerts with fetched alerts (live alerts first, deduplicated)
+  const combinedAlerts = [...liveAlerts, ...alerts.filter(
+    a => !liveAlerts.find(la => la.alertId === a.alertId)
+  )].slice(0, 20);
   
   if (loading) {
     return (
@@ -168,15 +236,42 @@ export default function DashboardPage() {
               <Zap className="w-5 h-5 text-primary-400" />
               <span>Your Subscription</span>
             </h2>
-            <a 
-              href={`https://explorer.solana.com/address/${pdaInfo.subscriberPDA}?cluster=devnet`}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="text-sm text-dark-400 hover:text-primary-400 flex items-center space-x-1"
-            >
-              <span>View on Explorer</span>
-              <ExternalLink className="w-3 h-3" />
-            </a>
+            <div className="flex items-center space-x-3">
+              {/* WebSocket Status */}
+              <div className={`flex items-center space-x-2 px-3 py-1 rounded-full text-sm ${
+                wsConnected 
+                  ? 'bg-green-500/20 text-green-400' 
+                  : wsConnecting 
+                    ? 'bg-yellow-500/20 text-yellow-400'
+                    : 'bg-dark-600 text-dark-400'
+              }`}>
+                {wsConnected ? (
+                  <>
+                    <Radio className="w-3 h-3 animate-pulse" />
+                    <span>Live</span>
+                  </>
+                ) : wsConnecting ? (
+                  <>
+                    <Wifi className="w-3 h-3 animate-pulse" />
+                    <span>Connecting...</span>
+                  </>
+                ) : (
+                  <>
+                    <WifiOff className="w-3 h-3" />
+                    <span>Offline</span>
+                  </>
+                )}
+              </div>
+              <a 
+                href={`https://explorer.solana.com/address/${pdaInfo.subscriberPDA}?cluster=devnet`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-dark-400 hover:text-primary-400 flex items-center space-x-1"
+              >
+                <span>Explorer</span>
+                <ExternalLink className="w-3 h-3" />
+              </a>
+            </div>
           </div>
           
           {/* Status Row */}
@@ -184,8 +279,10 @@ export default function DashboardPage() {
             <div>
               <div className="text-sm text-dark-400 mb-1">Status</div>
               <div className="flex items-center space-x-2">
-                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
-                <span className="font-medium text-green-400">Active On-Chain</span>
+                <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`}></div>
+                <span className={`font-medium ${wsConnected ? 'text-green-400' : 'text-yellow-400'}`}>
+                  {wsConnected ? 'Live' : 'Active On-Chain'}
+                </span>
               </div>
             </div>
             <div>
@@ -200,7 +297,12 @@ export default function DashboardPage() {
             </div>
             <div>
               <div className="text-sm text-dark-400 mb-1">Alerts Received</div>
-              <div className="font-medium">{pdaInfo.subscriber?.alertsReceived.toLocaleString()}</div>
+              <div className="font-medium">
+                {(pdaInfo.subscriber?.alertsReceived || 0) + wsAlertsReceived}
+                {wsAlertsReceived > 0 && (
+                  <span className="text-green-400 text-sm ml-1">(+{wsAlertsReceived} live)</span>
+                )}
+              </div>
             </div>
             <div>
               <div className="text-sm text-dark-400 mb-1">Channels Active</div>
@@ -238,6 +340,13 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
+
+          {/* WebSocket Error */}
+          {wsError && (
+            <div className="mt-4 p-3 bg-red-500/10 border border-red-500/20 rounded-lg text-red-400 text-sm">
+              {wsError}
+            </div>
+          )}
         </div>
       ) : (
         /* Connected but Not Subscribed */
@@ -273,7 +382,7 @@ export default function DashboardPage() {
       <div className="grid md:grid-cols-3 gap-8 mb-8">
         <div className="md:col-span-1">
           <h2 className="text-lg font-semibold mb-4">Alerts by Channel</h2>
-          <div className="bg-dark-800/50 border border-white/10 rounded-xl p-4 space-y-3">
+          <div className="bg-dark-800/50 border border-white/10 rounded-xl p-4 space-y-3 max-h-96 overflow-y-auto">
             {stats && Object.entries(stats.alerts.byChannel)
               .sort(([,a], [,b]) => b - a)
               .map(([channel, count]) => {
@@ -302,8 +411,14 @@ export default function DashboardPage() {
         {/* Recent Alerts */}
         <div className="md:col-span-2">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">
-              {connected && subscribedChannels.length > 0 ? 'Recent Alerts (All Channels)' : 'Recent Alerts'}
+            <h2 className="text-lg font-semibold flex items-center space-x-2">
+              <span>{wsConnected ? 'Live Alerts' : 'Recent Alerts'}</span>
+              {wsConnected && (
+                <span className="flex items-center space-x-1 text-sm font-normal text-green-400">
+                  <Radio className="w-3 h-3 animate-pulse" />
+                  <span>Live</span>
+                </span>
+              )}
             </h2>
             <a 
               href="/alerts" 
@@ -314,15 +429,25 @@ export default function DashboardPage() {
             </a>
           </div>
           <div className="space-y-4">
-            {alerts.slice(0, 5).map((alert) => {
+            {combinedAlerts.slice(0, 5).map((alert, index) => {
               const isFromSubscribed = subscribedChannels.includes(alert.channel);
+              const isLive = liveAlerts.find(la => la.alertId === alert.alertId);
               return (
-                <div key={alert.alertId} className={isFromSubscribed ? 'ring-1 ring-primary-500/30 rounded-xl' : ''}>
+                <div 
+                  key={alert.alertId} 
+                  className={`${isFromSubscribed ? 'ring-1 ring-primary-500/30 rounded-xl' : ''} ${isLive ? 'animate-pulse-once' : ''}`}
+                >
+                  {isLive && (
+                    <div className="text-xs text-green-400 mb-1 flex items-center space-x-1">
+                      <Radio className="w-3 h-3" />
+                      <span>Just received</span>
+                    </div>
+                  )}
                   <AlertCard alert={alert} compact />
                 </div>
               );
             })}
-            {alerts.length === 0 && (
+            {combinedAlerts.length === 0 && (
               <div className="text-center text-dark-400 py-8 bg-dark-800/30 rounded-xl">
                 No alerts yet. Check back soon!
               </div>
@@ -340,6 +465,15 @@ export default function DashboardPage() {
               <span className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></span>
               <span className="text-green-400">Connected</span>
             </span>
+            {wsConnected && (
+              <>
+                <span className="text-dark-600">|</span>
+                <span className="flex items-center space-x-2">
+                  <Radio className="w-3 h-3 text-green-400 animate-pulse" />
+                  <span className="text-green-400">WebSocket Live</span>
+                </span>
+              </>
+            )}
           </div>
           <div className="flex items-center space-x-4">
             <div className="text-dark-400">

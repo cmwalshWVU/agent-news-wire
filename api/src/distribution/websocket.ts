@@ -1,6 +1,7 @@
 import { WebSocket } from 'ws';
 import { Alert, Channel } from '../types/index.js';
 import { subscriptionStore } from '../services/index.js';
+import { getEffectiveConfig, TRIAL_MODE } from '../config/trial.js';
 
 interface WebSocketClient {
   ws: WebSocket;
@@ -8,9 +9,6 @@ interface WebSocketClient {
   channels: Set<Channel>;
   connectedAt: Date;
 }
-
-// Price per alert in USDC (mock for MVP)
-const PRICE_PER_ALERT = 0.02;
 
 /**
  * WebSocket distribution server
@@ -35,10 +33,13 @@ export class AlertDistributor {
     console.log(`[WS] Client connected: ${subscriberId} (${channels.join(', ')})`);
 
     // Send welcome message
+    const config = getEffectiveConfig();
     this.sendToClient(client, {
       type: 'connected',
       subscriberId,
       channels,
+      trialMode: TRIAL_MODE,
+      pricePerAlert: config.pricePerAlert,
       message: 'Connected to Agent News Wire'
     });
 
@@ -82,6 +83,8 @@ export class AlertDistributor {
    */
   async distribute(alert: Alert) {
     const recipients: string[] = [];
+    const config = getEffectiveConfig();
+    const pricePerAlert = config.pricePerAlert;
 
     for (const [subscriberId, client] of this.clients) {
       // Check if client is subscribed to this channel
@@ -89,28 +92,33 @@ export class AlertDistributor {
         continue;
       }
 
-      // Check balance and charge (mock)
-      const charged = subscriptionStore.charge(subscriberId, PRICE_PER_ALERT);
-      if (!charged) {
-        // Send low balance warning
-        this.sendToClient(client, {
-          type: 'warning',
-          code: 'LOW_BALANCE',
-          message: 'Insufficient balance. Please deposit USDC to continue receiving alerts.'
-        });
-        continue;
+      // In trial mode or if price is 0, skip balance check
+      if (pricePerAlert > 0) {
+        const charged = subscriptionStore.charge(subscriberId, pricePerAlert);
+        if (!charged) {
+          // Send low balance warning
+          this.sendToClient(client, {
+            type: 'warning',
+            code: 'LOW_BALANCE',
+            message: 'Insufficient balance. Please deposit USDC to continue receiving alerts.'
+          });
+          continue;
+        }
+      } else {
+        // Trial mode: still increment alerts received counter
+        subscriptionStore.incrementAlertsReceived(subscriberId);
       }
 
       // Send the alert
       this.sendToClient(client, {
         type: 'alert',
         alert,
-        charged: PRICE_PER_ALERT
+        charged: pricePerAlert
       });
 
       recipients.push(subscriberId);
       this.alertsSent++;
-      this.revenueGenerated += PRICE_PER_ALERT;
+      this.revenueGenerated += pricePerAlert;
     }
 
     if (recipients.length > 0) {
