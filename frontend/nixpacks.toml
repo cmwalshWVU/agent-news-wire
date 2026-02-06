@@ -1,0 +1,11 @@
+[phases.setup]
+nixPkgs = ["nodejs_22", "python3", "gcc", "gnumake", "pkg-config", "libudev-zero", "libusb1"]
+
+[phases.install]
+cmds = ["npm ci --ignore-scripts || npm ci"]
+
+[phases.build]
+cmds = ["npm run build"]
+
+[start]
+cmd = "npm start"

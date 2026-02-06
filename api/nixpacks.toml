@@ -2,13 +2,10 @@
 nixPkgs = ["nodejs_22", "python3", "gcc", "gnumake"]
 
 [phases.install]
-cmds = ["rm -rf node_modules/.cache && npm ci"]
+cmds = ["npm ci"]
 
 [phases.build]
 cmds = ["npm run build"]
 
 [start]
 cmd = "npm start"
-
-[caches]
-disabled = true
