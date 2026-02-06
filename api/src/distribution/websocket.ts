@@ -30,7 +30,8 @@ export class AlertDistributor {
     };
 
     this.clients.set(subscriberId, client);
-    console.log(`[WS] Client connected: ${subscriberId} (${channels.join(', ')})`);
+    console.log(`[WS] Client connected: ${subscriberId}`);
+    console.log(`[WS] Subscribed to ${channels.length} channels: ${channels.join(', ')}`);
 
     // Send welcome message
     const config = getEffectiveConfig();
@@ -86,9 +87,15 @@ export class AlertDistributor {
     const config = getEffectiveConfig();
     const pricePerAlert = config.pricePerAlert;
 
+    // Debug: log distribution attempt
+    if (this.clients.size > 0) {
+      console.log(`[WS] Distributing alert ${alert.alertId} (channel: ${alert.channel}) to ${this.clients.size} connected client(s)`);
+    }
+
     for (const [subscriberId, client] of this.clients) {
       // Check if client is subscribed to this channel
       if (!client.channels.has(alert.channel)) {
+        console.log(`[WS] Client ${subscriberId} not subscribed to ${alert.channel} (has: ${Array.from(client.channels).join(', ')})`);
         continue;
       }
 
@@ -116,6 +123,7 @@ export class AlertDistributor {
         charged: pricePerAlert
       });
 
+      console.log(`[WS] ✅ Delivered alert to ${subscriberId}, incrementing alertsReceived`);
       recipients.push(subscriberId);
       this.alertsSent++;
       this.revenueGenerated += pricePerAlert;
