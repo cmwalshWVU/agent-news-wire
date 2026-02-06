@@ -1,9 +1,14 @@
 {
   "name": "agent-news-wire-demo",
-  "version": "0.1.0",
+  "version": "0.2.0",
+  "description": "Demo agents for Agent News Wire",
   "type": "module",
   "scripts": {
-    "subscriber": "tsx subscriber.ts"
+    "subscriber": "tsx subscriber.ts",
+    "alpha": "tsx alpha-agent.ts",
+    "trading": "tsx trading-agent.ts",
+    "demo": "tsx run-demo.ts",
+    "full-demo": "tsx run-demo.ts"
   },
   "dependencies": {
     "ws": "^8.18.0"
