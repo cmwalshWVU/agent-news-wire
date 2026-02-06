@@ -7,7 +7,8 @@ import {
   CreditCard, Wallet, Loader2, Plus, 
   ArrowUpCircle, Clock, TrendingUp, ExternalLink, AlertCircle
 } from 'lucide-react';
-import { getPDAInfo, buildDepositTx, type PDAInfo } from '@/lib/api';
+import { getPDAInfo, buildDepositTx, getSubscription, type PDAInfo, type Subscriber } from '@/lib/api';
+import { getStoredSubscription } from '@/lib/subscription';
 import { toast } from 'sonner';
 
 export default function BalancePage() {
@@ -15,6 +16,7 @@ export default function BalancePage() {
   const { connection } = useConnection();
   
   const [pdaInfo, setPdaInfo] = useState<PDAInfo | null>(null);
+  const [apiSubscriber, setApiSubscriber] = useState<Subscriber | null>(null);
   const [solBalance, setSolBalance] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [depositing, setDepositing] = useState(false);
@@ -37,6 +39,18 @@ export default function BalancePage() {
         ]);
         setPdaInfo(pda);
         setSolBalance(balance / LAMPORTS_PER_SOL);
+        
+        // Also fetch in-memory subscriber data (has real-time alertsReceived)
+        const stored = getStoredSubscription();
+        if (stored?.subscriberId) {
+          try {
+            const sub = await getSubscription(stored.subscriberId);
+            setApiSubscriber(sub);
+          } catch (err) {
+            // Subscriber might not exist in memory (server restart)
+            console.log('Could not fetch API subscriber:', err);
+          }
+        }
       } catch (err) {
         console.error('Failed to load balance:', err);
       } finally {
@@ -191,11 +205,11 @@ export default function BalancePage() {
       </div>
       
       {/* Stats */}
-      {pdaInfo?.existsOnChain && pdaInfo.subscriber && (
+      {(pdaInfo?.existsOnChain || apiSubscriber) && (
         <div className="grid grid-cols-3 gap-4 mb-8">
           <div className="bg-dark-800/30 rounded-xl p-4 text-center">
             <TrendingUp className="w-5 h-5 text-blue-400 mx-auto mb-2" />
-            <div className="text-2xl font-bold">{pdaInfo.subscriber.alertsReceived}</div>
+            <div className="text-2xl font-bold">{apiSubscriber?.alertsReceived ?? pdaInfo?.subscriber?.alertsReceived ?? 0}</div>
             <div className="text-sm text-dark-400">Alerts Received</div>
           </div>
           <div className="bg-dark-800/30 rounded-xl p-4 text-center">
