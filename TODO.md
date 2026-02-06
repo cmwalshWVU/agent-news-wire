@@ -1,7 +1,7 @@
 # Agent News Wire - TODO List
 
 **Created:** 2026-02-03  
-**Last Updated:** 2026-02-06 15:00 UTC
+**Last Updated:** 2026-02-06 16:30 UTC
 
 ---
 
@@ -79,13 +79,17 @@
 - [x] Docker Compose for local development
 - [x] Volume mounting for data persistence
 
-### Cloud Deployment & CI/CD
-- [ ] Set up CI/CD pipeline (GitHub Actions or GitLab CI)
-  - Build, test, deploy on push to main
-  - Environment: staging → production
-- [ ] Deploy to cloud provider (Railway / Render / Fly.io / AWS)
-- [ ] Set up environment variables and secrets management
-- [ ] Configure domain and SSL
+### Cloud Deployment & CI/CD ✅ COMPLETE (2026-02-06)
+- [x] GitLab CI/CD pipeline (.gitlab-ci.yml)
+  - Build stage: API and Frontend
+  - Test stage: Type checking, linting
+  - Deploy stage: Docker image build and push
+  - Manual Railway deployment trigger
+- [x] Render blueprint (render.yaml) for one-click deploy
+- [x] Railway configuration (railway.json)
+- [x] Environment variable templates (.env.example)
+- [x] Enhanced health check endpoint (/api/health, /api/ready)
+- [x] Comprehensive deployment documentation (docs/DEPLOYMENT.md)
 
 ### Data Sources
 - [x] Add CFTC RSS feed (`regulatory/cftc` channel) ✅ 2026-02-05

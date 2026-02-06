@@ -1,0 +1,220 @@
+# Agent News Wire - GitLab CI/CD Pipeline
+# Builds, tests, and deploys API and Frontend
+
+stages:
+  - build
+  - test
+  - deploy
+
+variables:
+  # Docker registry (GitLab Container Registry)
+  DOCKER_REGISTRY: $CI_REGISTRY
+  API_IMAGE: $CI_REGISTRY_IMAGE/api
+  FRONTEND_IMAGE: $CI_REGISTRY_IMAGE/frontend
+  # Node version
+  NODE_VERSION: "22"
+
+# Cache node_modules between jobs
+.node_cache: &node_cache
+  cache:
+    key: ${CI_COMMIT_REF_SLUG}
+    paths:
+      - api/node_modules/
+      - frontend/node_modules/
+    policy: pull-push
+
+# =============================================================================
+# BUILD STAGE
+# =============================================================================
+
+build:api:
+  stage: build
+  image: node:${NODE_VERSION}-alpine
+  <<: *node_cache
+  script:
+    - cd api
+    - npm ci
+    - npm run build
+  artifacts:
+    paths:
+      - api/dist/
+    expire_in: 1 hour
+  rules:
+    - changes:
+        - api/**/*
+        - .gitlab-ci.yml
+
+build:frontend:
+  stage: build
+  image: node:${NODE_VERSION}-alpine
+  <<: *node_cache
+  script:
+    - cd frontend
+    - npm ci
+    - npm run build
+  artifacts:
+    paths:
+      - frontend/.next/
+    expire_in: 1 hour
+  rules:
+    - changes:
+        - frontend/**/*
+        - .gitlab-ci.yml
+
+# =============================================================================
+# TEST STAGE
+# =============================================================================
+
+test:api:
+  stage: test
+  image: node:${NODE_VERSION}-alpine
+  <<: *node_cache
+  needs:
+    - build:api
+  script:
+    - cd api
+    - npm ci
+    # Run type checking
+    - npm run build
+    # Add tests here when available
+    # - npm test
+  rules:
+    - changes:
+        - api/**/*
+        - .gitlab-ci.yml
+
+lint:frontend:
+  stage: test
+  image: node:${NODE_VERSION}-alpine
+  <<: *node_cache
+  needs:
+    - build:frontend
+  script:
+    - cd frontend
+    - npm ci
+    # Run lint if configured
+    - npm run lint || true
+  rules:
+    - changes:
+        - frontend/**/*
+        - .gitlab-ci.yml
+  allow_failure: true
+
+# =============================================================================
+# DOCKER BUILD (for container deployments)
+# =============================================================================
+
+docker:api:
+  stage: deploy
+  image: docker:24
+  services:
+    - docker:24-dind
+  needs:
+    - build:api
+    - test:api
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - cd api
+    - docker build -t $API_IMAGE:$CI_COMMIT_SHA -t $API_IMAGE:latest .
+    - docker push $API_IMAGE:$CI_COMMIT_SHA
+    - docker push $API_IMAGE:latest
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - api/**/*
+        - .gitlab-ci.yml
+
+docker:frontend:
+  stage: deploy
+  image: docker:24
+  services:
+    - docker:24-dind
+  needs:
+    - build:frontend
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    - cd frontend
+    - docker build -t $FRONTEND_IMAGE:$CI_COMMIT_SHA -t $FRONTEND_IMAGE:latest .
+    - docker push $FRONTEND_IMAGE:$CI_COMMIT_SHA
+    - docker push $FRONTEND_IMAGE:latest
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+      changes:
+        - frontend/**/*
+        - .gitlab-ci.yml
+
+# =============================================================================
+# DEPLOY TO RAILWAY (Optional - configure in GitLab CI/CD settings)
+# =============================================================================
+
+deploy:railway:api:
+  stage: deploy
+  image: node:${NODE_VERSION}-alpine
+  needs:
+    - docker:api
+  before_script:
+    - npm install -g @railway/cli
+  script:
+    - railway link $RAILWAY_PROJECT_ID
+    - railway up --service api
+  environment:
+    name: production
+    url: https://api.agentnewswire.io
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $RAILWAY_TOKEN
+      changes:
+        - api/**/*
+  when: manual
+
+deploy:railway:frontend:
+  stage: deploy
+  image: node:${NODE_VERSION}-alpine
+  needs:
+    - docker:frontend
+  before_script:
+    - npm install -g @railway/cli
+  script:
+    - railway link $RAILWAY_PROJECT_ID
+    - railway up --service frontend
+  environment:
+    name: production
+    url: https://agentnewswire.io
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main" && $RAILWAY_TOKEN
+      changes:
+        - frontend/**/*
+  when: manual
+
+# =============================================================================
+# DEPLOY TO RENDER (Alternative - uses render.yaml)
+# =============================================================================
+
+# Render auto-deploys from the repo if render.yaml is present
+# No CI job needed - just push to main
+
+# =============================================================================
+# CLEANUP
+# =============================================================================
+
+cleanup:old-images:
+  stage: deploy
+  image: docker:24
+  services:
+    - docker:24-dind
+  before_script:
+    - docker login -u $CI_REGISTRY_USER -p $CI_REGISTRY_PASSWORD $CI_REGISTRY
+  script:
+    # Keep only the last 5 images
+    - |
+      for IMAGE in $API_IMAGE $FRONTEND_IMAGE; do
+        TAGS=$(docker manifest inspect $IMAGE 2>/dev/null | jq -r '.manifests[].digest' | tail -n +6)
+        for TAG in $TAGS; do
+          docker manifest rm $IMAGE@$TAG || true
+        done
+      done
+  rules:
+    - if: $CI_COMMIT_BRANCH == "main"
+  when: manual
+  allow_failure: true

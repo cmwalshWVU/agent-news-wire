@@ -328,7 +328,18 @@ NEXT_PUBLIC_SOLANA_RPC=https://api.devnet.solana.com
 NEXT_PUBLIC_SOLANA_NETWORK=devnet
 ```
 
-## Docker Deployment
+## Deployment
+
+For detailed deployment instructions, see **[docs/DEPLOYMENT.md](docs/DEPLOYMENT.md)**.
+
+| Platform | Difficulty | One-Click |
+|----------|------------|-----------|
+| Railway | Easy | ✅ |
+| Render | Easy | ✅ (uses `render.yaml`) |
+| Fly.io | Medium | ❌ |
+| Docker/VPS | Medium | ❌ |
+
+## Docker (Local Development)
 
 ### Quick Start with Docker Compose
 

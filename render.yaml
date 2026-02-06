@@ -1,0 +1,63 @@
+# Agent News Wire - Render Blueprint
+# Deploy both API and Frontend with one click
+# https://render.com/docs/blueprint-spec
+
+services:
+  # =============================================================================
+  # API Server
+  # =============================================================================
+  - type: web
+    name: anw-api
+    runtime: docker
+    dockerfilePath: ./api/Dockerfile
+    dockerContext: ./api
+    region: oregon
+    plan: free # or starter for production
+    healthCheckPath: /api/health
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: PORT
+        value: 3000
+      - key: HOST
+        value: 0.0.0.0
+      - key: DATABASE_PATH
+        value: /app/data/anw.db
+      # Solana RPC (optional)
+      - key: SOLANA_RPC_URL
+        sync: false # Set manually in dashboard
+      # Data source API keys (optional)
+      - key: WHALE_ALERT_API_KEY
+        sync: false
+      - key: HELIUS_API_KEY
+        sync: false
+    disk:
+      name: anw-data
+      mountPath: /app/data
+      sizeGB: 1
+
+  # =============================================================================
+  # Frontend (Next.js)
+  # =============================================================================
+  - type: web
+    name: anw-frontend
+    runtime: docker
+    dockerfilePath: ./frontend/Dockerfile
+    dockerContext: ./frontend
+    region: oregon
+    plan: free
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NEXT_PUBLIC_API_URL
+        fromService:
+          name: anw-api
+          type: web
+          property: host
+          # Will be https://anw-api.onrender.com
+      - key: NEXT_PUBLIC_WS_URL
+        value: wss://anw-api.onrender.com
+      - key: NEXT_PUBLIC_SOLANA_RPC
+        value: https://api.devnet.solana.com
+      - key: NEXT_PUBLIC_SOLANA_NETWORK
+        value: devnet

@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { alertStore, subscriptionStore, publisherStore } from '../services/index.js';
+import { database, alertStore, subscriptionStore, publisherStore } from '../services/index.js';
 import { distributor } from '../distribution/index.js';
 import { solanaClient, SUBSCRIPTION_PROGRAM_ID, ALERT_PROGRAM_ID, PUBLISHER_PROGRAM_ID } from '../services/solana-client.js';
 import { TRIAL_MODE, TRIAL_CONFIG, getEffectiveConfig } from '../config/trial.js';
@@ -40,12 +40,44 @@ export async function statsRoutes(fastify: FastifyInstance) {
 
   /**
    * GET /api/health - Health check
+   * Used by load balancers, monitoring, and container orchestration
    */
   fastify.get('/api/health', async () => {
+    // Check database connectivity
+    let dbStatus = 'healthy';
+    try {
+      const dbStats = database.stats();
+      if (dbStats.subscribers === undefined) {
+        dbStatus = 'unhealthy';
+      }
+    } catch (err) {
+      dbStatus = 'unhealthy';
+    }
+
+    const status = dbStatus === 'healthy' ? 'healthy' : 'degraded';
+
     return { 
-      status: 'healthy',
+      status,
+      version: '0.2.0',
+      database: dbStatus,
+      uptime: Math.floor(process.uptime()),
       timestamp: new Date().toISOString()
     };
+  });
+
+  /**
+   * GET /api/ready - Readiness check
+   * Indicates the service is ready to accept traffic
+   */
+  fastify.get('/api/ready', async (request, reply) => {
+    try {
+      // Verify database is accessible
+      database.stats();
+      return { ready: true };
+    } catch (err) {
+      reply.status(503);
+      return { ready: false, error: 'Database not available' };
+    }
   });
 
   /**
