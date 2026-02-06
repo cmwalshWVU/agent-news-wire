@@ -76,15 +76,26 @@ export default function AlertsPage() {
           'markets/whale-movements',
           'markets/liquidations'
         ];
+        console.log('[Alerts] No subscriber ID found, creating new subscription...');
         try {
           const res = await createSubscription(allChannels);
+          console.log('[Alerts] API response:', res);
+          if (!res?.subscriber?.id) {
+            console.error('[Alerts] Invalid response - no subscriber.id:', res);
+            toast.error('Failed to create subscription: invalid response');
+            return;
+          }
           subscriberId = res.subscriber.id;
           localStorage.setItem('anw-subscriber-id', subscriberId);
           console.log('[Alerts] Created new subscription:', subscriberId);
-        } catch (err) {
+          toast.success(`Subscription created: ${subscriberId.slice(0, 8)}...`);
+        } catch (err: any) {
           console.error('[Alerts] Failed to create subscription:', err);
+          toast.error(`Failed to create subscription: ${err.message || 'Unknown error'}`);
           return;
         }
+      } else {
+        console.log('[Alerts] Using existing subscriber ID:', subscriberId);
       }
       
       ws = createAlertWebSocket(
