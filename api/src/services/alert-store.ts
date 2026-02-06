@@ -113,13 +113,12 @@ export class AlertStore {
       raw_data: alert.rawData ? JSON.stringify(alert.rawData) : null,
       publisher_id: alert.publisherId || null,
       publisher_name: alert.publisherName || null,
-      hash
+      content_hash: hash
     });
 
     // Insert hash for deduplication
     await db('alert_hashes').insert({
       hash,
-      alert_id: alert.alertId,
       created_at: new Date().toISOString()
     });
 
