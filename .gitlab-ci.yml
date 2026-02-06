@@ -85,8 +85,11 @@ deploy-api:
     - npm install -g @railway/cli
     - cd api
     - echo "Testing Railway auth..."
-    - railway whoami
-    - railway up --service api --detach
+    - railway whoami || echo "whoami failed with exit code $?"
+    - echo "Listing services..."
+    - railway service list || echo "service list failed"
+    - echo "Deploying..."
+    - railway up --service api --detach -v
   environment:
     name: production
   rules:
@@ -105,8 +108,11 @@ deploy-frontend:
     - npm install -g @railway/cli
     - cd frontend
     - echo "Testing Railway auth..."
-    - railway whoami
-    - railway up --service frontend --detach
+    - railway whoami || echo "whoami failed with exit code $?"
+    - echo "Listing services..."
+    - railway service list || echo "service list failed"
+    - echo "Deploying..."
+    - railway up --service frontend --detach -v
   environment:
     name: production
   rules:
