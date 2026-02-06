@@ -83,11 +83,10 @@ deploy-api:
     - test -n "$RAILWAY_PROJECT_ID" || (echo "ERROR - RAILWAY_PROJECT_ID not set" && exit 1)
     - export RAILWAY_TOKEN="$RAILWAY_TOKEN"
     - export RAILWAY_PROJECT_ID="$RAILWAY_PROJECT_ID"
-    - echo "Token length ${#RAILWAY_TOKEN}, Project ID $RAILWAY_PROJECT_ID"
+    - echo "Token prefix ${RAILWAY_TOKEN:0:8}, Project ID $RAILWAY_PROJECT_ID"
     - npm install -g @railway/cli
     - cd api
-    - railway whoami
-    - railway up --service api -d
+    - railway up --service api -e production -d
   environment:
     name: production
   rules:
@@ -104,11 +103,10 @@ deploy-frontend:
     - test -n "$RAILWAY_PROJECT_ID" || (echo "ERROR - RAILWAY_PROJECT_ID not set" && exit 1)
     - export RAILWAY_TOKEN="$RAILWAY_TOKEN"
     - export RAILWAY_PROJECT_ID="$RAILWAY_PROJECT_ID"
-    - echo "Token length ${#RAILWAY_TOKEN}, Project ID $RAILWAY_PROJECT_ID"
+    - echo "Token prefix ${RAILWAY_TOKEN:0:8}, Project ID $RAILWAY_PROJECT_ID"
     - npm install -g @railway/cli
     - cd frontend
-    - railway whoami
-    - railway up --service frontend -d
+    - railway up --service frontend -e production -d
   environment:
     name: production
   rules:
