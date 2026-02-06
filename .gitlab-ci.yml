@@ -75,7 +75,7 @@ typecheck-frontend:
 
 deploy-api:
   stage: deploy
-  image: node:${NODE_VERSION}-alpine
+  image: node:${NODE_VERSION}
   needs: ["typecheck-api"]
   script:
     - echo "Checking Railway credentials..."
