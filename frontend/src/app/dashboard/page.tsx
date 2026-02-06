@@ -276,7 +276,6 @@ export default function DashboardPage() {
           <div className="bg-dark-800/50 border border-white/10 rounded-xl p-4 space-y-3">
             {stats && Object.entries(stats.alerts.byChannel)
               .sort(([,a], [,b]) => b - a)
-              .slice(0, 8)
               .map(([channel, count]) => {
                 const isSubscribed = subscribedChannels.includes(channel);
                 return (
