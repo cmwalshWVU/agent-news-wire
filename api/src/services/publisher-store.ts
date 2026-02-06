@@ -16,7 +16,7 @@ interface PublisherRow {
   alerts_published: number;
   alerts_consumed: number;
   reputation_score: number;
-  stake: number;
+  staked_amount: number;
   on_chain: boolean | number;
   publisher_pda: string | null;
 }
@@ -70,7 +70,7 @@ export class PublisherStore {
       alertsPublished: row.alerts_published,
       alertsConsumed: row.alerts_consumed,
       reputationScore: row.reputation_score,
-      stake: row.stake,
+      stake: row.staked_amount,
       onChain: Boolean(row.on_chain),
       publisherPDA: row.publisher_pda || undefined
     };
@@ -280,7 +280,7 @@ export class PublisherStore {
     const db = await database.get();
     const result = await db('publishers')
       .where('id', publisherId)
-      .increment('stake', amount);
+      .increment('staked_amount', amount);
     
     return result > 0;
   }
@@ -331,7 +331,7 @@ export class PublisherStore {
     const [agg] = await db('publishers')
       .sum('alerts_published as published')
       .sum('alerts_consumed as consumed')
-      .sum('stake as staked');
+      .sum('staked_amount as staked');
 
     return {
       totalPublishers: Number(total.count),
