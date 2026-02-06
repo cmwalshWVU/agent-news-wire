@@ -2,7 +2,7 @@
 
 import { useEffect, useState, useCallback } from 'react';
 import { Bell, Filter, Wifi, WifiOff, Pause, Play } from 'lucide-react';
-import { fetchAlerts, fetchChannels, createAlertWebSocket, type Alert, type Channel } from '@/lib/api';
+import { fetchAlerts, fetchChannels, createAlertWebSocket, createSubscription, type Alert, type Channel } from '@/lib/api';
 import { AlertCard } from '@/components/AlertCard';
 import { toast } from 'sonner';
 
@@ -50,23 +50,45 @@ export default function AlertsPage() {
   
   // WebSocket connection
   useEffect(() => {
-    // For demo, use a mock subscriber ID
-    // In production, this would come from the user's actual subscription
-    const subscriberId = 'demo-subscriber';
+    let ws: WebSocket | null = null;
     
-    const ws = createAlertWebSocket(
-      subscriberId,
-      handleNewAlert,
-      (error) => {
-        console.error('WS Error:', error);
-        setWsConnected(false);
-      },
-      () => setWsConnected(true),
-      () => setWsConnected(false)
-    );
+    const connect = async () => {
+      // Check for existing subscriber ID in localStorage
+      let subscriberId = localStorage.getItem('anw-subscriber-id');
+      
+      if (!subscriberId) {
+        // Create a new subscription
+        try {
+          const res = await createSubscription(['all']);
+          subscriberId = res.subscriber.id;
+          localStorage.setItem('anw-subscriber-id', subscriberId);
+          console.log('[Alerts] Created new subscription:', subscriberId);
+        } catch (err) {
+          console.error('[Alerts] Failed to create subscription:', err);
+          return;
+        }
+      }
+      
+      ws = createAlertWebSocket(
+        subscriberId,
+        handleNewAlert,
+        (error) => {
+          console.error('WS Error:', error);
+          setWsConnected(false);
+          // Clear invalid subscriber ID if connection fails
+          if (error.includes('not found')) {
+            localStorage.removeItem('anw-subscriber-id');
+          }
+        },
+        () => setWsConnected(true),
+        () => setWsConnected(false)
+      );
+    };
+    
+    connect();
     
     return () => {
-      ws.close();
+      ws?.close();
     };
   }, [handleNewAlert]);
   
