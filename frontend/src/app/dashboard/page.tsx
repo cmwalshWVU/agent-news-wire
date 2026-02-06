@@ -6,10 +6,11 @@ import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { 
   Bell, Users, DollarSign, Activity, RefreshCw, 
   ExternalLink, Zap, Wallet, AlertCircle, Plus,
-  Radio, WifiOff, Wifi
+  Radio, WifiOff, Wifi, Rocket
 } from 'lucide-react';
 import { fetchStats, fetchAlerts, getPDAInfo, createSubscription, type Stats, type Alert, type PDAInfo } from '@/lib/api';
 import { decodeChannelBitmap, getChannelShortName, getCategoryColor } from '@/lib/channels';
+import { getStoredSubscription, clearSubscription, type StoredSubscription } from '@/lib/subscription';
 import { useAlertWebSocket } from '@/hooks/useAlertWebSocket';
 import { AlertCard } from '@/components/AlertCard';
 import { toast } from 'sonner';
@@ -23,16 +24,17 @@ export default function DashboardPage() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [subscriberId, setSubscriberId] = useState<string | null>(null);
+  const [storedSub, setStoredSub] = useState<StoredSubscription | null>(null);
   const [liveAlerts, setLiveAlerts] = useState<Alert[]>([]);
   const [wsEnabled, setWsEnabled] = useState(false);
   
   // Track if we've already tried to setup subscription
   const setupAttemptedRef = useRef(false);
   
-  // Decode channels from bitmap
+  // Get channels - from on-chain (bitmap) or stored subscription
   const subscribedChannels = pdaInfo?.subscriber?.channels 
     ? decodeChannelBitmap(pdaInfo.subscriber.channels)
-    : [];
+    : storedSub?.channels || [];
 
   // Handle incoming live alerts
   const handleLiveAlert = useCallback((alert: Alert) => {
@@ -64,7 +66,7 @@ export default function DashboardPage() {
       setStats(statsData);
       setAlerts(alertsData.alerts || []);
       
-      // Only fetch PDA info if wallet is connected
+      // Fetch PDA info if wallet is connected
       if (publicKey) {
         try {
           const pda = await getPDAInfo(publicKey.toBase58());
@@ -87,16 +89,29 @@ export default function DashboardPage() {
     setRefreshing(false);
   };
 
-  // Clear state when wallet disconnects
+  // Check for stored subscription on mount
+  useEffect(() => {
+    const stored = getStoredSubscription();
+    if (stored) {
+      setStoredSub(stored);
+      setSubscriberId(stored.subscriberId);
+      setWsEnabled(true);
+      console.log('[Dashboard] Found stored subscription:', stored.subscriberId);
+    }
+  }, []);
+
+  // Handle wallet disconnect - keep stored subscription active
   useEffect(() => {
     if (!publicKey) {
       setPdaInfo(null);
-      setSubscriberId(null);
-      setLiveAlerts([]);
-      setWsEnabled(false);
+      // Don't clear subscriberId or wsEnabled if we have a stored subscription
+      if (!storedSub) {
+        setSubscriberId(null);
+        setWsEnabled(false);
+      }
       setupAttemptedRef.current = false;
     }
-  }, [publicKey]);
+  }, [publicKey, storedSub]);
   
   // Load data on mount and when wallet changes
   useEffect(() => {
@@ -105,7 +120,7 @@ export default function DashboardPage() {
     return () => clearInterval(interval);
   }, [loadData]);
 
-  // Setup API subscription when on-chain subscription is detected
+  // Setup API subscription when on-chain subscription is detected (and no stored sub)
   useEffect(() => {
     const setupSubscription = async () => {
       if (!publicKey || !pdaInfo?.existsOnChain || subscriberId || setupAttemptedRef.current) {
@@ -131,17 +146,20 @@ export default function DashboardPage() {
         }
       } catch (err) {
         console.error('[Dashboard] Failed to create API subscription:', err);
-        setupAttemptedRef.current = false; // Allow retry
+        setupAttemptedRef.current = false;
       }
     };
 
     setupSubscription();
   }, [publicKey, pdaInfo?.existsOnChain, pdaInfo?.subscriber?.channels, subscriberId]);
 
-  // Combine live alerts with fetched alerts (live alerts first, deduplicated)
+  // Combine live alerts with fetched alerts
   const combinedAlerts = [...liveAlerts, ...alerts.filter(
     a => !liveAlerts.find(la => la.alertId === a.alertId)
   )].slice(0, 20);
+
+  // Check if user has any subscription (stored or on-chain)
+  const hasSubscription = !!storedSub || pdaInfo?.existsOnChain;
   
   if (loading) {
     return (
@@ -206,34 +224,8 @@ export default function DashboardPage() {
       </div>
       
       {/* Subscription Status Section */}
-      {!connected ? (
-        /* Not Connected - Show CTA */
-        <div className="bg-gradient-to-r from-primary-900/30 to-dark-800/50 border border-primary-500/20 rounded-xl p-6 mb-8">
-          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
-            <div className="flex items-start space-x-4">
-              <div className="p-3 bg-primary-500/20 rounded-lg">
-                <Wallet className="w-6 h-6 text-primary-400" />
-              </div>
-              <div>
-                <h2 className="text-lg font-semibold mb-1">Connect Your Wallet</h2>
-                <p className="text-dark-300 text-sm max-w-md">
-                  Connect your Solana wallet to create an on-chain subscription and receive 
-                  real-time alerts via WebSocket. Trial mode is active - all features are free!
-                </p>
-              </div>
-            </div>
-            <button
-              onClick={() => setWalletModalVisible(true)}
-              disabled={connecting}
-              className="flex items-center justify-center space-x-2 px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap"
-            >
-              <Wallet className="w-4 h-4" />
-              <span>{connecting ? 'Connecting...' : 'Connect Wallet'}</span>
-            </button>
-          </div>
-        </div>
-      ) : pdaInfo?.existsOnChain ? (
-        /* Connected & Subscribed - Show Full Status */
+      {hasSubscription ? (
+        /* Has Subscription (stored or on-chain) - Show Live Status */
         <div className="bg-dark-800/50 border border-white/10 rounded-xl p-6 mb-8">
           <div className="flex items-center justify-between mb-4">
             <h2 className="text-lg font-semibold flex items-center space-x-2">
@@ -266,15 +258,17 @@ export default function DashboardPage() {
                   </>
                 )}
               </div>
-              <a 
-                href={`https://explorer.solana.com/address/${pdaInfo.subscriberPDA}?cluster=devnet`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="text-sm text-dark-400 hover:text-primary-400 flex items-center space-x-1"
-              >
-                <span>Explorer</span>
-                <ExternalLink className="w-3 h-3" />
-              </a>
+              {pdaInfo?.existsOnChain && (
+                <a 
+                  href={`https://explorer.solana.com/address/${pdaInfo.subscriberPDA}?cluster=devnet`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="text-sm text-dark-400 hover:text-primary-400 flex items-center space-x-1"
+                >
+                  <span>Explorer</span>
+                  <ExternalLink className="w-3 h-3" />
+                </a>
+              )}
             </div>
           </div>
           
@@ -285,31 +279,27 @@ export default function DashboardPage() {
               <div className="flex items-center space-x-2">
                 <div className={`w-2 h-2 rounded-full ${wsConnected ? 'bg-green-500 animate-pulse' : 'bg-yellow-500'}`}></div>
                 <span className={`font-medium ${wsConnected ? 'text-green-400' : 'text-yellow-400'}`}>
-                  {wsConnected ? 'Live' : 'Active On-Chain'}
+                  {wsConnected ? 'Receiving Alerts' : pdaInfo?.existsOnChain ? 'On-Chain Active' : 'Active'}
                 </span>
               </div>
             </div>
             <div>
-              <div className="text-sm text-dark-400 mb-1">Balance</div>
+              <div className="text-sm text-dark-400 mb-1">Type</div>
               <div className="font-medium">
-                {stats?.pricing.trialMode ? (
-                  <span className="text-green-400">Unlimited (Trial)</span>
-                ) : (
-                  `${pdaInfo.subscriber?.balance.toFixed(2)} USDC`
-                )}
+                {pdaInfo?.existsOnChain ? 'On-Chain (Solana)' : 'Trial Mode'}
               </div>
             </div>
             <div>
               <div className="text-sm text-dark-400 mb-1">Alerts Received</div>
               <div className="font-medium">
-                {(pdaInfo.subscriber?.alertsReceived || 0) + wsAlertsReceived}
+                {wsAlertsReceived}
                 {wsAlertsReceived > 0 && (
-                  <span className="text-green-400 text-sm ml-1">(+{wsAlertsReceived} live)</span>
+                  <span className="text-green-400 text-sm ml-1">live</span>
                 )}
               </div>
             </div>
             <div>
-              <div className="text-sm text-dark-400 mb-1">Channels Active</div>
+              <div className="text-sm text-dark-400 mb-1">Channels</div>
               <div className="font-medium">{subscribedChannels.length}</div>
             </div>
           </div>
@@ -337,7 +327,7 @@ export default function DashboardPage() {
               </div>
             ) : (
               <div className="text-dark-400 text-sm">
-                No channels subscribed yet.{' '}
+                No channels configured.{' '}
                 <a href="/subscribe" className="text-primary-400 hover:underline">
                   Add channels →
                 </a>
@@ -353,21 +343,18 @@ export default function DashboardPage() {
           )}
         </div>
       ) : (
-        /* Connected but Not Subscribed */
-        <div className="bg-dark-800/50 border border-amber-500/20 rounded-xl p-6 mb-8">
+        /* No Subscription - Show CTA */
+        <div className="bg-gradient-to-r from-primary-900/30 to-purple-900/30 border border-primary-500/20 rounded-xl p-6 mb-8">
           <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
             <div className="flex items-start space-x-4">
-              <div className="p-3 bg-amber-500/20 rounded-lg">
-                <AlertCircle className="w-6 h-6 text-amber-400" />
+              <div className="p-3 bg-primary-500/20 rounded-lg">
+                <Rocket className="w-6 h-6 text-primary-400" />
               </div>
               <div>
-                <h2 className="text-lg font-semibold mb-1">No Subscription Found</h2>
+                <h2 className="text-lg font-semibold mb-1">Start Receiving Alerts</h2>
                 <p className="text-dark-300 text-sm max-w-md">
-                  Your wallet is connected but doesn't have an on-chain subscription yet. 
-                  Create one to start receiving real-time alerts.
-                </p>
-                <p className="text-xs text-dark-500 mt-1">
-                  Wallet: {publicKey?.toBase58().slice(0, 8)}...{publicKey?.toBase58().slice(-6)}
+                  Subscribe to channels and receive real-time alerts instantly. 
+                  No signup required - trial mode is active!
                 </p>
               </div>
             </div>
@@ -376,7 +363,7 @@ export default function DashboardPage() {
               className="flex items-center justify-center space-x-2 px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-lg transition-colors whitespace-nowrap"
             >
               <Zap className="w-4 h-4" />
-              <span>Create Subscription</span>
+              <span>Subscribe Now</span>
             </a>
           </div>
         </div>
@@ -407,7 +394,7 @@ export default function DashboardPage() {
               </div>
             )}
           </div>
-          {connected && subscribedChannels.length > 0 && (
+          {subscribedChannels.length > 0 && (
             <p className="text-xs text-dark-500 mt-2">● = subscribed channel</p>
           )}
         </div>
@@ -483,9 +470,9 @@ export default function DashboardPage() {
             <div className="text-dark-400">
               Network: <span className="text-white">{stats?.onChain.network?.toUpperCase() || 'DEVNET'}</span>
             </div>
-            {connected && (
+            {connected && publicKey && (
               <div className="text-dark-400">
-                Wallet: <span className="text-white">{publicKey?.toBase58().slice(0, 4)}...{publicKey?.toBase58().slice(-4)}</span>
+                Wallet: <span className="text-white">{publicKey.toBase58().slice(0, 4)}...{publicKey.toBase58().slice(-4)}</span>
               </div>
             )}
           </div>
