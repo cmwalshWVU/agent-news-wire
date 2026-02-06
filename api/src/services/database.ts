@@ -16,11 +16,21 @@ async function initSchema(db: Knex): Promise<void> {
       table.decimal('balance', 20, 6).defaultTo(0);
       table.integer('alerts_received').defaultTo(0);
       table.boolean('on_chain').defaultTo(false);
+      table.boolean('active').defaultTo(true);
       table.timestamp('created_at').defaultTo(db.fn.now());
       table.string('webhook_url').nullable();
       table.index('wallet_address');
     });
     console.log('[Database] Created subscribers table');
+  } else {
+    // Add missing columns to existing table
+    const hasActive = await db.schema.hasColumn('subscribers', 'active');
+    if (!hasActive) {
+      await db.schema.alterTable('subscribers', (table) => {
+        table.boolean('active').defaultTo(true);
+      });
+      console.log('[Database] Added active column to subscribers');
+    }
   }
 
   // Alerts table
