@@ -5,6 +5,9 @@ node_modules/
 .next/
 out/
 
+# TypeScript build info (causes cache issues)
+tsconfig.tsbuildinfo
+
 # Logs
 *.log
 
@@ -18,3 +21,4 @@ out/
 
 # Misc
 *.md
+*.bak
