@@ -3,11 +3,12 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { useWallet } from '@solana/wallet-adapter-react';
+import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { useConnection } from '@solana/wallet-adapter-react';
 import { Transaction } from '@solana/web3.js';
 import { 
   CheckCircle, Circle, Loader2, Wallet, Zap, 
-  ExternalLink, Check, Rocket, ArrowRight
+  ExternalLink, Check, ArrowRight, Shield
 } from 'lucide-react';
 import { 
   fetchChannels, createSubscription, buildCreateTx, 
@@ -19,6 +20,7 @@ import { toast } from 'sonner';
 export default function SubscribePage() {
   const router = useRouter();
   const { publicKey, connected, signTransaction } = useWallet();
+  const { setVisible: setWalletModalVisible } = useWalletModal();
   const { connection } = useConnection();
   
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -29,14 +31,6 @@ export default function SubscribePage() {
   const [step, setStep] = useState<'select' | 'confirm' | 'success'>('select');
   const [txSignature, setTxSignature] = useState<string>('');
   const [subscriptionId, setSubscriptionId] = useState<string>('');
-  
-  // Check for existing stored subscription
-  useEffect(() => {
-    const stored = getStoredSubscription();
-    if (stored) {
-      setSelectedChannels(stored.channels);
-    }
-  }, []);
   
   // Load channels
   useEffect(() => {
@@ -78,43 +72,8 @@ export default function SubscribePage() {
     setSelectedChannels([]);
   };
   
-  // Quick subscribe - no wallet required
-  const handleQuickSubscribe = async () => {
-    if (selectedChannels.length === 0) {
-      toast.error('Please select at least one channel');
-      return;
-    }
-    
-    setCreating(true);
-    
-    try {
-      const result = await createSubscription(selectedChannels);
-      
-      // Save to localStorage for persistence
-      saveSubscription({
-        subscriberId: result.subscriber.id,
-        channels: selectedChannels,
-        createdAt: new Date().toISOString(),
-      });
-      
-      setSubscriptionId(result.subscriber.id);
-      toast.success('Subscription created! Redirecting to live alerts...');
-      
-      // Redirect to dashboard after short delay
-      setTimeout(() => {
-        router.push('/dashboard');
-      }, 1500);
-      
-    } catch (err: any) {
-      console.error('Subscribe error:', err);
-      toast.error(err.message || 'Failed to create subscription');
-    } finally {
-      setCreating(false);
-    }
-  };
-  
-  // On-chain subscribe with wallet
-  const handleOnChainSubscribe = async () => {
+  // Subscribe with wallet
+  const handleSubscribe = async () => {
     if (selectedChannels.length === 0) {
       toast.error('Please select at least one channel');
       return;
@@ -131,9 +90,8 @@ export default function SubscribePage() {
     try {
       let signature = '';
       
-      // Check if already exists on-chain
+      // Create on-chain subscription if doesn't exist
       if (!pdaInfo?.existsOnChain) {
-        // Build and sign transaction
         const txData = await buildCreateTx(publicKey.toBase58(), selectedChannels);
         const tx = Transaction.from(Buffer.from(txData.transaction, 'base64'));
         const signed = await signTransaction(tx);
@@ -145,7 +103,7 @@ export default function SubscribePage() {
       // Sync with API
       const result = await createSubscription(selectedChannels, publicKey.toBase58());
       
-      // Save to localStorage
+      // Save to localStorage for quick reconnection
       saveSubscription({
         subscriberId: result.subscriber.id,
         channels: selectedChannels,
@@ -155,7 +113,7 @@ export default function SubscribePage() {
       
       setSubscriptionId(result.subscriber.id);
       setStep('success');
-      toast.success(signature ? 'On-chain subscription created!' : 'Subscription synced!');
+      toast.success(signature ? 'On-chain subscription created!' : 'Subscription activated!');
       
     } catch (err: any) {
       console.error('Subscribe error:', err);
@@ -199,8 +157,8 @@ export default function SubscribePage() {
         <div className="bg-dark-800/50 border border-white/10 rounded-xl p-6 text-left mb-6">
           <div className="space-y-4">
             <div>
-              <div className="text-sm text-dark-400">Subscription ID</div>
-              <div className="font-mono text-sm break-all">{subscriptionId}</div>
+              <div className="text-sm text-dark-400">Wallet</div>
+              <div className="font-mono text-sm">{publicKey?.toBase58()}</div>
             </div>
             {txSignature && (
               <div>
@@ -240,55 +198,92 @@ export default function SubscribePage() {
     );
   }
   
+  // Not Connected - Prompt to Connect
+  if (!connected) {
+    return (
+      <div className="max-w-2xl mx-auto px-4 sm:px-6 lg:px-8 py-16">
+        <div className="text-center mb-8">
+          <h1 className="text-3xl font-bold mb-4">Subscribe to Alerts</h1>
+          <p className="text-dark-300">
+            Connect your Solana wallet to create a subscription and start receiving real-time alerts.
+          </p>
+        </div>
+        
+        <div className="bg-dark-800/50 border border-white/10 rounded-xl p-8 text-center">
+          <div className="w-16 h-16 bg-primary-500/20 rounded-full flex items-center justify-center mx-auto mb-6">
+            <Wallet className="w-8 h-8 text-primary-400" />
+          </div>
+          
+          <h2 className="text-xl font-semibold mb-2">Connect Your Wallet</h2>
+          <p className="text-dark-400 mb-6 max-w-md mx-auto">
+            Your wallet address is used to manage your subscription and will be required for payments when trial mode ends.
+          </p>
+          
+          <button
+            onClick={() => setWalletModalVisible(true)}
+            className="inline-flex items-center space-x-2 bg-primary-500 hover:bg-primary-600 text-white px-8 py-4 rounded-xl font-semibold transition-colors"
+          >
+            <Wallet className="w-5 h-5" />
+            <span>Connect Wallet</span>
+          </button>
+          
+          <div className="mt-8 pt-6 border-t border-white/10">
+            <div className="flex items-center justify-center space-x-2 text-sm text-dark-400">
+              <Shield className="w-4 h-4" />
+              <span>We never access your funds without your approval</span>
+            </div>
+          </div>
+        </div>
+        
+        {/* Trial Mode Banner */}
+        <div className="mt-6 bg-green-500/10 border border-green-500/30 rounded-xl p-4 text-center">
+          <div className="flex items-center justify-center space-x-2 text-green-400">
+            <Check className="w-5 h-5" />
+            <span className="font-medium">Trial Mode Active - All Features Free!</span>
+          </div>
+          <p className="text-dark-400 text-sm mt-1">
+            No payment required during trial. Just connect and subscribe.
+          </p>
+        </div>
+        
+        {/* For Agents */}
+        <div className="mt-6 text-center text-sm text-dark-500">
+          <p>
+            For AI agents: Use <code className="text-dark-300 bg-dark-800 px-2 py-1 rounded">POST /api/subscribe</code> with a wallet address
+          </p>
+        </div>
+      </div>
+    );
+  }
+  
+  // Connected - Show Channel Selection
   return (
     <div className="max-w-4xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
       <div className="mb-8">
         <h1 className="text-3xl font-bold">Subscribe to Alerts</h1>
         <p className="text-dark-400 mt-1">
-          Select channels and start receiving real-time alerts instantly
+          Select channels and start receiving real-time alerts
         </p>
       </div>
       
-      {/* Quick Start Banner */}
-      <div className="bg-gradient-to-r from-primary-900/40 to-purple-900/40 border border-primary-500/30 rounded-xl p-6 mb-6">
-        <div className="flex items-start space-x-4">
-          <div className="p-3 bg-primary-500/20 rounded-lg">
-            <Rocket className="w-6 h-6 text-primary-400" />
-          </div>
-          <div className="flex-1">
-            <h2 className="text-lg font-semibold mb-1">Quick Start - No Wallet Required</h2>
-            <p className="text-dark-300 text-sm mb-3">
-              Trial mode is active. Pick your channels and start receiving alerts immediately. 
-              No signup, no wallet, no payment required.
-            </p>
-            <div className="flex items-center space-x-2 text-sm text-green-400">
-              <Check className="w-4 h-4" />
-              <span>All features free during trial</span>
+      {/* Wallet Status */}
+      <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 mb-6">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center space-x-3">
+            <Wallet className="w-5 h-5 text-green-400" />
+            <div>
+              <div className="font-medium text-green-400">Wallet Connected</div>
+              <div className="text-sm text-dark-400">{publicKey?.toBase58().substring(0, 20)}...</div>
             </div>
           </div>
+          {pdaInfo?.existsOnChain && (
+            <div className="flex items-center space-x-2 text-green-400 text-sm">
+              <Check className="w-4 h-4" />
+              <span>On-chain subscription exists</span>
+            </div>
+          )}
         </div>
       </div>
-      
-      {/* Wallet Status (Optional) */}
-      {connected && (
-        <div className="bg-green-500/10 border border-green-500/30 rounded-xl p-4 mb-6">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <Wallet className="w-5 h-5 text-green-400" />
-              <div>
-                <div className="font-medium">Wallet Connected</div>
-                <div className="text-sm text-dark-400">{publicKey?.toBase58().substring(0, 20)}...</div>
-              </div>
-            </div>
-            {pdaInfo?.existsOnChain && (
-              <div className="flex items-center space-x-2 text-green-400 text-sm">
-                <Check className="w-4 h-4" />
-                <span>On-chain subscription exists</span>
-              </div>
-            )}
-          </div>
-        </div>
-      )}
       
       {/* Channel Selection */}
       <div className="bg-dark-800/50 border border-white/10 rounded-xl p-6 mb-6">
@@ -362,64 +357,41 @@ export default function SubscribePage() {
             <span className="text-dark-400">Price per Alert</span>
             <span className="font-medium text-green-400">FREE (Trial)</span>
           </div>
+          <div className="flex justify-between">
+            <span className="text-dark-400">Subscription Type</span>
+            <span className="font-medium">On-Chain (Solana Devnet)</span>
+          </div>
         </div>
       </div>
       
-      {/* Subscribe Buttons */}
-      <div className="space-y-3">
-        {/* Primary: Quick Subscribe */}
-        <button
-          onClick={handleQuickSubscribe}
-          disabled={creating || selectedChannels.length === 0}
-          className={`
-            w-full flex items-center justify-center space-x-2 px-6 py-4 rounded-xl font-semibold
-            transition-all disabled:opacity-50 disabled:cursor-not-allowed
-            bg-primary-500 hover:bg-primary-600
-          `}
-        >
-          {creating && !connected ? (
-            <>
-              <Loader2 className="w-5 h-5 animate-spin" />
-              <span>Creating...</span>
-            </>
-          ) : (
-            <>
-              <Zap className="w-5 h-5" />
-              <span>Start Receiving Alerts</span>
-              <ArrowRight className="w-5 h-5" />
-            </>
-          )}
-        </button>
-        
-        {/* Secondary: On-chain (if wallet connected) */}
-        {connected && (
-          <button
-            onClick={handleOnChainSubscribe}
-            disabled={creating || selectedChannels.length === 0}
-            className={`
-              w-full flex items-center justify-center space-x-2 px-6 py-4 rounded-xl font-semibold
-              transition-all disabled:opacity-50 disabled:cursor-not-allowed
-              bg-dark-700 hover:bg-dark-600 border border-white/10
-            `}
-          >
-            {creating && connected ? (
-              <>
-                <Loader2 className="w-5 h-5 animate-spin" />
-                <span>{step === 'confirm' ? 'Confirm in Wallet...' : 'Creating...'}</span>
-              </>
-            ) : (
-              <>
-                <Wallet className="w-5 h-5" />
-                <span>{pdaInfo?.existsOnChain ? 'Sync On-Chain Subscription' : 'Create On-Chain Subscription'}</span>
-              </>
-            )}
-          </button>
+      {/* Subscribe Button */}
+      <button
+        onClick={handleSubscribe}
+        disabled={creating || selectedChannels.length === 0}
+        className={`
+          w-full flex items-center justify-center space-x-2 px-6 py-4 rounded-xl font-semibold
+          transition-all disabled:opacity-50 disabled:cursor-not-allowed
+          ${creating 
+            ? 'bg-dark-700' 
+            : 'bg-primary-500 hover:bg-primary-600'
+          }
+        `}
+      >
+        {creating ? (
+          <>
+            <Loader2 className="w-5 h-5 animate-spin" />
+            <span>{step === 'confirm' ? 'Confirm in Wallet...' : 'Creating...'}</span>
+          </>
+        ) : (
+          <>
+            <Zap className="w-5 h-5" />
+            <span>
+              {pdaInfo?.existsOnChain ? 'Update Subscription' : 'Create Subscription'}
+            </span>
+            <ArrowRight className="w-5 h-5" />
+          </>
         )}
-      </div>
-      
-      <p className="text-center text-dark-500 text-sm mt-4">
-        For AI agents: Use <code className="text-dark-300">POST /api/subscribe</code> then connect to WebSocket
-      </p>
+      </button>
     </div>
   );
 }
