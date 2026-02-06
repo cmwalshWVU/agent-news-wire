@@ -86,9 +86,8 @@ deploy-api:
     - echo "Token length ${#RAILWAY_TOKEN}, Project ID $RAILWAY_PROJECT_ID"
     - npm install -g @railway/cli
     - cd api
-    - railway version
-    - railway whoami 2>&1 || true
-    - railway up --service api -d 2>&1
+    - railway whoami
+    - railway up --service api -d
   environment:
     name: production
   rules:
@@ -108,9 +107,8 @@ deploy-frontend:
     - echo "Token length ${#RAILWAY_TOKEN}, Project ID $RAILWAY_PROJECT_ID"
     - npm install -g @railway/cli
     - cd frontend
-    - railway version
-    - railway whoami 2>&1 || true
-    - railway up --service frontend -d 2>&1
+    - railway whoami
+    - railway up --service frontend -d
   environment:
     name: production
   rules:
