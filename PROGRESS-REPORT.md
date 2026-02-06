@@ -1,7 +1,7 @@
 # Agent News Wire - Progress Report
 
 **Date:** 2026-02-03  
-**Last Updated:** 2026-02-04 00:00 UTC  
+**Last Updated:** 2026-02-06 01:00 UTC  
 **Status:** Full Stack MVP Complete (API + Frontend + On-Chain)
 
 ---
@@ -312,6 +312,19 @@ open http://localhost:3001
   - Backup: Rekt News scraper (additional coverage)
   - Impact scoring based on loss amount
 - ✅ Updated all documentation (DATA-SOURCES.md, TODO.md, PROGRESS-REPORT.md)
+
+### Session 4 (2026-02-06)
+- ✅ **Dashboard Bug Fixes & Improvements**
+  - Fixed: `pdaInfo` state now clears when wallet disconnects
+  - Fixed: Dashboard now shows different views for each user state
+  - Added: "Connect Wallet" CTA for non-connected users
+  - Added: "No Subscription Found" state for connected but not subscribed
+  - Added: Channel bitmap decoder utility (`frontend/src/lib/channels.ts`)
+  - Added: Subscribed channels displayed as colored badges
+  - Added: Channels highlighted in alert list
+  - Added: Explorer link for on-chain subscription
+  - Added: Wallet address shown in footer
+- ✅ Build successful (all pages generated)
 
 ---
 

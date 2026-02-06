@@ -1,6 +1,6 @@
 # Agent News Wire - Feature Checklist
 
-**Last Updated:** 2026-02-04
+**Last Updated:** 2026-02-06
 
 ## Legend
 - ✅ Complete
@@ -35,6 +35,10 @@
 - ✅ Trial mode banner
 - ✅ Responsive design
 - ✅ Dark theme
+- ✅ Dashboard: Connect wallet CTA
+- ✅ Dashboard: Channel bitmap decoder
+- ✅ Dashboard: Subscribed channels display
+- ✅ Dashboard: Wallet state handling (disconnect clears state)
 
 ### Build
 - ✅ Next.js 14 App Router

@@ -1,7 +1,7 @@
 # Agent News Wire - TODO List
 
 **Created:** 2026-02-03  
-**Last Updated:** 2026-02-05 01:45 UTC
+**Last Updated:** 2026-02-06 01:00 UTC
 
 ---
 
@@ -44,6 +44,11 @@
 - [x] Alert card component
 - [x] Header with navigation
 - [x] Production build successful
+- [x] Dashboard: Connect wallet CTA for non-connected users ✅ 2026-02-06
+- [x] Dashboard: Channel bitmap decoder utility ✅ 2026-02-06
+- [x] Dashboard: Display subscribed channels with badges ✅ 2026-02-06
+- [x] Dashboard: Clear state on wallet disconnect ✅ 2026-02-06
+- [x] Dashboard: Three distinct states (disconnected/connected/subscribed) ✅ 2026-02-06
 
 ---
 

@@ -2,21 +2,29 @@
 
 import { useEffect, useState } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
+import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { 
-  Bell, TrendingUp, Users, DollarSign, 
-  Activity, RefreshCw, ExternalLink, Zap 
+  Bell, Users, DollarSign, Activity, RefreshCw, 
+  ExternalLink, Zap, Wallet, AlertCircle, Plus
 } from 'lucide-react';
 import { fetchStats, fetchAlerts, getPDAInfo, type Stats, type Alert, type PDAInfo } from '@/lib/api';
+import { decodeChannelBitmap, getChannelShortName, getCategoryColor } from '@/lib/channels';
 import { AlertCard } from '@/components/AlertCard';
 
 export default function DashboardPage() {
-  const { publicKey, connected } = useWallet();
+  const { publicKey, connected, connecting } = useWallet();
+  const { setVisible: setWalletModalVisible } = useWalletModal();
   const [stats, setStats] = useState<Stats | null>(null);
   const [alerts, setAlerts] = useState<Alert[]>([]);
   const [pdaInfo, setPdaInfo] = useState<PDAInfo | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   
+  // Decode channels from bitmap
+  const subscribedChannels = pdaInfo?.subscriber?.channels 
+    ? decodeChannelBitmap(pdaInfo.subscriber.channels)
+    : [];
+
   const loadData = async () => {
     try {
       const [statsData, alertsData] = await Promise.all([
@@ -26,9 +34,15 @@ export default function DashboardPage() {
       setStats(statsData);
       setAlerts(alertsData.alerts || []);
       
+      // Only fetch PDA info if wallet is connected
       if (publicKey) {
-        const pda = await getPDAInfo(publicKey.toBase58());
-        setPdaInfo(pda);
+        try {
+          const pda = await getPDAInfo(publicKey.toBase58());
+          setPdaInfo(pda);
+        } catch (err) {
+          console.error('Failed to fetch PDA info:', err);
+          setPdaInfo(null);
+        }
       }
     } catch (err) {
       console.error('Failed to load data:', err);
@@ -42,7 +56,15 @@ export default function DashboardPage() {
     await loadData();
     setRefreshing(false);
   };
+
+  // Clear pdaInfo when wallet disconnects
+  useEffect(() => {
+    if (!publicKey) {
+      setPdaInfo(null);
+    }
+  }, [publicKey]);
   
+  // Load data on mount and when wallet changes
   useEffect(() => {
     loadData();
     const interval = setInterval(loadData, 30000); // Refresh every 30s
@@ -111,46 +133,143 @@ export default function DashboardPage() {
         />
       </div>
       
-      {/* Wallet Status */}
-      {connected && pdaInfo && (
+      {/* Subscription Status Section */}
+      {!connected ? (
+        /* Not Connected - Show CTA */
+        <div className="bg-gradient-to-r from-primary-900/30 to-dark-800/50 border border-primary-500/20 rounded-xl p-6 mb-8">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex items-start space-x-4">
+              <div className="p-3 bg-primary-500/20 rounded-lg">
+                <Wallet className="w-6 h-6 text-primary-400" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold mb-1">Connect Your Wallet</h2>
+                <p className="text-dark-300 text-sm max-w-md">
+                  Connect your Solana wallet to create an on-chain subscription and receive 
+                  real-time alerts via WebSocket. Trial mode is active - all features are free!
+                </p>
+              </div>
+            </div>
+            <button
+              onClick={() => setWalletModalVisible(true)}
+              disabled={connecting}
+              className="flex items-center justify-center space-x-2 px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-lg transition-colors disabled:opacity-50 whitespace-nowrap"
+            >
+              <Wallet className="w-4 h-4" />
+              <span>{connecting ? 'Connecting...' : 'Connect Wallet'}</span>
+            </button>
+          </div>
+        </div>
+      ) : pdaInfo?.existsOnChain ? (
+        /* Connected & Subscribed - Show Full Status */
         <div className="bg-dark-800/50 border border-white/10 rounded-xl p-6 mb-8">
-          <h2 className="text-lg font-semibold mb-4 flex items-center space-x-2">
-            <Zap className="w-5 h-5 text-primary-400" />
-            <span>Your Subscription</span>
-          </h2>
+          <div className="flex items-center justify-between mb-4">
+            <h2 className="text-lg font-semibold flex items-center space-x-2">
+              <Zap className="w-5 h-5 text-primary-400" />
+              <span>Your Subscription</span>
+            </h2>
+            <a 
+              href={`https://explorer.solana.com/address/${pdaInfo.subscriberPDA}?cluster=devnet`}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-dark-400 hover:text-primary-400 flex items-center space-x-1"
+            >
+              <span>View on Explorer</span>
+              <ExternalLink className="w-3 h-3" />
+            </a>
+          </div>
           
-          {pdaInfo.existsOnChain ? (
-            <div className="grid md:grid-cols-3 gap-4">
-              <div>
-                <div className="text-sm text-dark-400 mb-1">Status</div>
-                <div className="flex items-center space-x-2">
-                  <div className="w-2 h-2 bg-green-500 rounded-full"></div>
-                  <span className="font-medium">Active On-Chain</span>
-                </div>
-              </div>
-              <div>
-                <div className="text-sm text-dark-400 mb-1">Balance</div>
-                <div className="font-medium">
-                  {stats?.pricing.trialMode ? 'Unlimited (Trial)' : `${pdaInfo.subscriber?.balance} USDC`}
-                </div>
-              </div>
-              <div>
-                <div className="text-sm text-dark-400 mb-1">Alerts Received</div>
-                <div className="font-medium">{pdaInfo.subscriber?.alertsReceived}</div>
+          {/* Status Row */}
+          <div className="grid md:grid-cols-4 gap-4 mb-6">
+            <div>
+              <div className="text-sm text-dark-400 mb-1">Status</div>
+              <div className="flex items-center space-x-2">
+                <div className="w-2 h-2 bg-green-500 rounded-full animate-pulse"></div>
+                <span className="font-medium text-green-400">Active On-Chain</span>
               </div>
             </div>
-          ) : (
-            <div className="text-dark-300">
-              <p>No on-chain subscription found for this wallet.</p>
-              <a href="/subscribe" className="text-primary-400 hover:underline mt-2 inline-block">
-                Create subscription →
-              </a>
+            <div>
+              <div className="text-sm text-dark-400 mb-1">Balance</div>
+              <div className="font-medium">
+                {stats?.pricing.trialMode ? (
+                  <span className="text-green-400">Unlimited (Trial)</span>
+                ) : (
+                  `${pdaInfo.subscriber?.balance.toFixed(2)} USDC`
+                )}
+              </div>
             </div>
-          )}
+            <div>
+              <div className="text-sm text-dark-400 mb-1">Alerts Received</div>
+              <div className="font-medium">{pdaInfo.subscriber?.alertsReceived.toLocaleString()}</div>
+            </div>
+            <div>
+              <div className="text-sm text-dark-400 mb-1">Channels Active</div>
+              <div className="font-medium">{subscribedChannels.length}</div>
+            </div>
+          </div>
+          
+          {/* Subscribed Channels */}
+          <div>
+            <div className="text-sm text-dark-400 mb-2">Subscribed Channels</div>
+            {subscribedChannels.length > 0 ? (
+              <div className="flex flex-wrap gap-2">
+                {subscribedChannels.map((channel) => (
+                  <span 
+                    key={channel}
+                    className={`px-3 py-1 rounded-full text-sm border ${getCategoryColor(channel)}`}
+                  >
+                    {getChannelShortName(channel)}
+                  </span>
+                ))}
+                <a
+                  href="/subscribe"
+                  className="px-3 py-1 rounded-full text-sm border border-dashed border-dark-500 text-dark-400 hover:border-primary-500 hover:text-primary-400 transition-colors flex items-center space-x-1"
+                >
+                  <Plus className="w-3 h-3" />
+                  <span>Manage</span>
+                </a>
+              </div>
+            ) : (
+              <div className="text-dark-400 text-sm">
+                No channels subscribed yet.{' '}
+                <a href="/subscribe" className="text-primary-400 hover:underline">
+                  Add channels →
+                </a>
+              </div>
+            )}
+          </div>
+        </div>
+      ) : (
+        /* Connected but Not Subscribed */
+        <div className="bg-dark-800/50 border border-amber-500/20 rounded-xl p-6 mb-8">
+          <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4">
+            <div className="flex items-start space-x-4">
+              <div className="p-3 bg-amber-500/20 rounded-lg">
+                <AlertCircle className="w-6 h-6 text-amber-400" />
+              </div>
+              <div>
+                <h2 className="text-lg font-semibold mb-1">No Subscription Found</h2>
+                <p className="text-dark-300 text-sm max-w-md">
+                  Your wallet is connected but doesn't have an on-chain subscription yet. 
+                  Create one to start receiving real-time alerts.
+                </p>
+                <p className="text-xs text-dark-500 mt-1">
+                  Wallet: {publicKey?.toBase58().slice(0, 8)}...{publicKey?.toBase58().slice(-6)}
+                </p>
+              </div>
+            </div>
+            <a
+              href="/subscribe"
+              className="flex items-center justify-center space-x-2 px-6 py-3 bg-primary-500 hover:bg-primary-600 text-white font-medium rounded-lg transition-colors whitespace-nowrap"
+            >
+              <Zap className="w-4 h-4" />
+              <span>Create Subscription</span>
+            </a>
+          </div>
         </div>
       )}
       
-      {/* Channel Breakdown */}
+      {/* Channel Breakdown & Recent Alerts */}
       <div className="grid md:grid-cols-3 gap-8 mb-8">
         <div className="md:col-span-1">
           <h2 className="text-lg font-semibold mb-4">Alerts by Channel</h2>
@@ -158,20 +277,35 @@ export default function DashboardPage() {
             {stats && Object.entries(stats.alerts.byChannel)
               .sort(([,a], [,b]) => b - a)
               .slice(0, 8)
-              .map(([channel, count]) => (
-                <div key={channel} className="flex items-center justify-between">
-                  <span className="text-sm text-dark-300">{channel}</span>
-                  <span className="text-sm font-medium">{count}</span>
-                </div>
-              ))
+              .map(([channel, count]) => {
+                const isSubscribed = subscribedChannels.includes(channel);
+                return (
+                  <div key={channel} className="flex items-center justify-between">
+                    <span className={`text-sm ${isSubscribed ? 'text-primary-400' : 'text-dark-300'}`}>
+                      {isSubscribed && '● '}{channel}
+                    </span>
+                    <span className="text-sm font-medium">{count}</span>
+                  </div>
+                );
+              })
             }
+            {(!stats || Object.keys(stats.alerts.byChannel).length === 0) && (
+              <div className="text-center text-dark-400 py-4">
+                No alerts yet
+              </div>
+            )}
           </div>
+          {connected && subscribedChannels.length > 0 && (
+            <p className="text-xs text-dark-500 mt-2">● = subscribed channel</p>
+          )}
         </div>
         
         {/* Recent Alerts */}
         <div className="md:col-span-2">
           <div className="flex items-center justify-between mb-4">
-            <h2 className="text-lg font-semibold">Recent Alerts</h2>
+            <h2 className="text-lg font-semibold">
+              {connected && subscribedChannels.length > 0 ? 'Recent Alerts (All Channels)' : 'Recent Alerts'}
+            </h2>
             <a 
               href="/alerts" 
               className="text-sm text-primary-400 hover:underline flex items-center space-x-1"
@@ -181,11 +315,16 @@ export default function DashboardPage() {
             </a>
           </div>
           <div className="space-y-4">
-            {alerts.slice(0, 5).map((alert) => (
-              <AlertCard key={alert.alertId} alert={alert} compact />
-            ))}
+            {alerts.slice(0, 5).map((alert) => {
+              const isFromSubscribed = subscribedChannels.includes(alert.channel);
+              return (
+                <div key={alert.alertId} className={isFromSubscribed ? 'ring-1 ring-primary-500/30 rounded-xl' : ''}>
+                  <AlertCard alert={alert} compact />
+                </div>
+              );
+            })}
             {alerts.length === 0 && (
-              <div className="text-center text-dark-400 py-8">
+              <div className="text-center text-dark-400 py-8 bg-dark-800/30 rounded-xl">
                 No alerts yet. Check back soon!
               </div>
             )}
@@ -195,7 +334,7 @@ export default function DashboardPage() {
       
       {/* API Status */}
       <div className="bg-dark-800/30 border border-white/5 rounded-xl p-4">
-        <div className="flex items-center justify-between text-sm">
+        <div className="flex items-center justify-between text-sm flex-wrap gap-2">
           <div className="flex items-center space-x-4">
             <span className="text-dark-400">API Status:</span>
             <span className="flex items-center space-x-2">
@@ -203,8 +342,15 @@ export default function DashboardPage() {
               <span className="text-green-400">Connected</span>
             </span>
           </div>
-          <div className="text-dark-400">
-            Network: <span className="text-white">{stats?.onChain.network.toUpperCase()}</span>
+          <div className="flex items-center space-x-4">
+            <div className="text-dark-400">
+              Network: <span className="text-white">{stats?.onChain.network?.toUpperCase() || 'DEVNET'}</span>
+            </div>
+            {connected && (
+              <div className="text-dark-400">
+                Wallet: <span className="text-white">{publicKey?.toBase58().slice(0, 4)}...{publicKey?.toBase58().slice(-4)}</span>
+              </div>
+            )}
           </div>
         </div>
       </div>
