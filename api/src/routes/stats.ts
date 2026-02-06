@@ -12,10 +12,17 @@ export async function statsRoutes(fastify: FastifyInstance) {
     const onChainStats = await solanaClient.getStats();
     const effectiveConfig = getEffectiveConfig(onChainStats);
     
+    // All stores are now async
+    const [alertStats, subscriptionStats, publisherStats] = await Promise.all([
+      alertStore.stats(),
+      subscriptionStore.stats(),
+      publisherStore.stats()
+    ]);
+
     return {
-      alerts: alertStore.stats(),
-      subscriptions: subscriptionStore.stats(),
-      publishers: publisherStore.stats(),
+      alerts: alertStats,
+      subscriptions: subscriptionStats,
+      publishers: publisherStats,
       distribution: distributor.stats(),
       pricing: {
         trialMode: TRIAL_MODE,
@@ -40,13 +47,11 @@ export async function statsRoutes(fastify: FastifyInstance) {
 
   /**
    * GET /api/health - Health check
-   * Used by load balancers, monitoring, and container orchestration
    */
   fastify.get('/api/health', async () => {
-    // Check database connectivity
     let dbStatus = 'healthy';
     try {
-      const dbStats = database.stats();
+      const dbStats = await database.stats();
       if (dbStats.subscribers === undefined) {
         dbStatus = 'unhealthy';
       }
@@ -67,12 +72,10 @@ export async function statsRoutes(fastify: FastifyInstance) {
 
   /**
    * GET /api/ready - Readiness check
-   * Indicates the service is ready to accept traffic
    */
   fastify.get('/api/ready', async (request, reply) => {
     try {
-      // Verify database is accessible
-      database.stats();
+      await database.stats();
       return { ready: true };
     } catch (err) {
       reply.status(503);
@@ -90,14 +93,12 @@ export async function statsRoutes(fastify: FastifyInstance) {
       version: '0.2.0',
       skillFile: '/skill.md',
       endpoints: {
-        // Subscriber endpoints
         subscribe: 'POST /api/subscribe',
         channels: 'GET /api/channels',
         alerts: 'GET /api/alerts',
         balance: 'GET /api/balance/:id',
         stats: 'GET /api/stats',
         websocket: 'WS /api/stream',
-        // Publisher endpoints (for agents)
         registerPublisher: 'POST /api/publishers/register',
         publishAlert: 'POST /api/alerts/publish',
         publishers: 'GET /api/publishers',

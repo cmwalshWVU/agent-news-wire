@@ -1,149 +1,219 @@
-import Database from 'better-sqlite3';
+import Knex from 'knex';
+import type { Knex as KnexType } from 'knex';
 import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// Database path - use environment variable or default to data directory
-const DB_PATH = process.env.DATABASE_PATH || path.join(__dirname, '../../data/anw.db');
+/**
+ * Database configuration
+ * 
+ * Supports both SQLite (local/simple) and PostgreSQL (production/Railway)
+ * 
+ * Environment variables:
+ * - DATABASE_URL: PostgreSQL connection string (takes precedence)
+ * - DATABASE_PATH: SQLite file path (default: ./data/anw.db)
+ */
+
+function getConfig(): KnexType.Config {
+  // PostgreSQL if DATABASE_URL is set
+  if (process.env.DATABASE_URL) {
+    console.log('[Database] Using PostgreSQL');
+    return {
+      client: 'pg',
+      connection: process.env.DATABASE_URL,
+      pool: {
+        min: 2,
+        max: 10
+      },
+      migrations: {
+        tableName: 'knex_migrations'
+      }
+    };
+  }
+
+  // SQLite as default (local development)
+  const dbPath = process.env.DATABASE_PATH || path.join(__dirname, '../../data/anw.db');
+  console.log(`[Database] Using SQLite at: ${dbPath}`);
+  
+  // Ensure data directory exists
+  const dbDir = path.dirname(dbPath);
+  import('fs').then(fs => {
+    if (!fs.existsSync(dbDir)) {
+      fs.mkdirSync(dbDir, { recursive: true });
+    }
+  });
+
+  return {
+    client: 'better-sqlite3',
+    connection: {
+      filename: dbPath
+    },
+    useNullAsDefault: true,
+    migrations: {
+      tableName: 'knex_migrations'
+    }
+  };
+}
 
 /**
- * SQLite Database singleton
- * Provides persistent storage for subscribers, alerts, and publishers
+ * Database service using Knex
+ * Supports SQLite (local) and PostgreSQL (production)
  */
 class DatabaseService {
-  private db: Database.Database | null = null;
+  private _db: KnexType | null = null;
+  private _isPostgres: boolean = false;
 
   /**
    * Initialize database connection and create tables
    */
-  init(): Database.Database {
-    if (this.db) return this.db;
+  async init(): Promise<KnexType> {
+    if (this._db) return this._db;
 
-    // Ensure data directory exists
-    const dbDir = path.dirname(DB_PATH);
-    import('fs').then(fs => {
-      if (!fs.existsSync(dbDir)) {
-        fs.mkdirSync(dbDir, { recursive: true });
-      }
-    });
+    const config = getConfig();
+    this._isPostgres = config.client === 'pg';
+    this._db = Knex(config);
 
-    console.log(`[Database] Initializing SQLite at: ${DB_PATH}`);
-    
-    this.db = new Database(DB_PATH);
-    this.db.pragma('journal_mode = WAL'); // Better concurrent access
-    this.db.pragma('foreign_keys = ON');
-    
-    this.createTables();
+    // Test connection
+    try {
+      await this._db.raw('SELECT 1');
+      console.log('[Database] Connection established');
+    } catch (err) {
+      console.error('[Database] Connection failed:', err);
+      throw err;
+    }
+
+    // Create tables
+    await this.createTables();
     
     console.log('[Database] Initialized successfully');
-    return this.db;
+    return this._db;
   }
 
   /**
-   * Get database instance
+   * Get database instance (initializes if needed)
    */
-  get(): Database.Database {
-    if (!this.db) {
-      return this.init();
+  async get(): Promise<KnexType> {
+    if (!this._db) {
+      await this.init();
     }
-    return this.db;
+    return this._db!;
+  }
+
+  /**
+   * Get synchronous access (for backward compatibility)
+   * Note: Should migrate to async methods
+   */
+  getSync(): KnexType {
+    if (!this._db) {
+      throw new Error('Database not initialized. Call init() first.');
+    }
+    return this._db;
+  }
+
+  /**
+   * Check if using PostgreSQL
+   */
+  isPostgres(): boolean {
+    return this._isPostgres;
   }
 
   /**
    * Create all tables
    */
-  private createTables() {
-    const db = this.db!;
+  private async createTables() {
+    const db = this._db!;
 
     // Subscribers table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS subscribers (
-        id TEXT PRIMARY KEY,
-        wallet_address TEXT UNIQUE,
-        channels TEXT NOT NULL, -- JSON array
-        webhook_url TEXT,
-        created_at TEXT NOT NULL,
-        balance REAL DEFAULT 0,
-        alerts_received INTEGER DEFAULT 0,
-        active INTEGER DEFAULT 1,
-        on_chain INTEGER DEFAULT 0
-      );
-      
-      CREATE INDEX IF NOT EXISTS idx_subscribers_wallet ON subscribers(wallet_address);
-      CREATE INDEX IF NOT EXISTS idx_subscribers_active ON subscribers(active);
-    `);
+    if (!(await db.schema.hasTable('subscribers'))) {
+      await db.schema.createTable('subscribers', (table) => {
+        table.string('id').primary();
+        table.string('wallet_address').unique().nullable();
+        table.text('channels').notNullable(); // JSON array
+        table.string('webhook_url').nullable();
+        table.string('created_at').notNullable();
+        table.float('balance').defaultTo(0);
+        table.integer('alerts_received').defaultTo(0);
+        table.boolean('active').defaultTo(true);
+        table.boolean('on_chain').defaultTo(false);
+        
+        table.index('wallet_address');
+        table.index('active');
+      });
+      console.log('[Database] Created subscribers table');
+    }
 
     // Alerts table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS alerts (
-        alert_id TEXT PRIMARY KEY,
-        channel TEXT NOT NULL,
-        priority TEXT NOT NULL,
-        timestamp TEXT NOT NULL,
-        headline TEXT NOT NULL,
-        summary TEXT NOT NULL,
-        entities TEXT NOT NULL, -- JSON array
-        tickers TEXT NOT NULL, -- JSON array
-        tokens TEXT NOT NULL, -- JSON array
-        source_url TEXT NOT NULL,
-        source_type TEXT NOT NULL,
-        sentiment TEXT,
-        impact_score REAL,
-        raw_data TEXT, -- JSON object
-        publisher_id TEXT,
-        publisher_name TEXT,
-        hash TEXT UNIQUE -- For deduplication
-      );
-      
-      CREATE INDEX IF NOT EXISTS idx_alerts_channel ON alerts(channel);
-      CREATE INDEX IF NOT EXISTS idx_alerts_timestamp ON alerts(timestamp DESC);
-      CREATE INDEX IF NOT EXISTS idx_alerts_publisher ON alerts(publisher_id);
-    `);
+    if (!(await db.schema.hasTable('alerts'))) {
+      await db.schema.createTable('alerts', (table) => {
+        table.string('alert_id').primary();
+        table.string('channel').notNullable();
+        table.string('priority').notNullable();
+        table.string('timestamp').notNullable();
+        table.string('headline').notNullable();
+        table.text('summary').notNullable();
+        table.text('entities').notNullable(); // JSON array
+        table.text('tickers').notNullable(); // JSON array
+        table.text('tokens').notNullable(); // JSON array
+        table.string('source_url').notNullable();
+        table.string('source_type').notNullable();
+        table.string('sentiment').nullable();
+        table.float('impact_score').nullable();
+        table.text('raw_data').nullable(); // JSON object
+        table.string('publisher_id').nullable();
+        table.string('publisher_name').nullable();
+        table.string('hash').unique().nullable();
+        
+        table.index('channel');
+        table.index('timestamp');
+        table.index('publisher_id');
+      });
+      console.log('[Database] Created alerts table');
+    }
 
     // Publishers table
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS publishers (
-        id TEXT PRIMARY KEY,
-        name TEXT NOT NULL UNIQUE,
-        description TEXT,
-        wallet_address TEXT,
-        api_key TEXT NOT NULL, -- Hashed
-        api_key_prefix TEXT NOT NULL,
-        channels TEXT NOT NULL, -- JSON array
-        status TEXT DEFAULT 'active',
-        created_at TEXT NOT NULL,
-        alerts_published INTEGER DEFAULT 0,
-        alerts_consumed INTEGER DEFAULT 0,
-        reputation_score REAL DEFAULT 50,
-        stake REAL DEFAULT 0,
-        on_chain INTEGER DEFAULT 0,
-        publisher_pda TEXT
-      );
-      
-      CREATE INDEX IF NOT EXISTS idx_publishers_api_key_prefix ON publishers(api_key_prefix);
-      CREATE INDEX IF NOT EXISTS idx_publishers_status ON publishers(status);
-    `);
+    if (!(await db.schema.hasTable('publishers'))) {
+      await db.schema.createTable('publishers', (table) => {
+        table.string('id').primary();
+        table.string('name').unique().notNullable();
+        table.text('description').nullable();
+        table.string('wallet_address').nullable();
+        table.string('api_key').notNullable(); // Hashed
+        table.string('api_key_prefix').notNullable();
+        table.text('channels').notNullable(); // JSON array
+        table.string('status').defaultTo('active');
+        table.string('created_at').notNullable();
+        table.integer('alerts_published').defaultTo(0);
+        table.integer('alerts_consumed').defaultTo(0);
+        table.float('reputation_score').defaultTo(50);
+        table.float('stake').defaultTo(0);
+        table.boolean('on_chain').defaultTo(false);
+        table.string('publisher_pda').nullable();
+        
+        table.index('api_key_prefix');
+        table.index('status');
+      });
+      console.log('[Database] Created publishers table');
+    }
 
-    // Alert hashes for deduplication (separate table for efficiency)
-    db.exec(`
-      CREATE TABLE IF NOT EXISTS alert_hashes (
-        hash TEXT PRIMARY KEY,
-        alert_id TEXT NOT NULL,
-        created_at TEXT NOT NULL
-      );
-    `);
-
-    console.log('[Database] Tables created/verified');
+    // Alert hashes for deduplication
+    if (!(await db.schema.hasTable('alert_hashes'))) {
+      await db.schema.createTable('alert_hashes', (table) => {
+        table.string('hash').primary();
+        table.string('alert_id').notNullable();
+        table.string('created_at').notNullable();
+      });
+      console.log('[Database] Created alert_hashes table');
+    }
   }
 
   /**
    * Close database connection
    */
-  close() {
-    if (this.db) {
-      this.db.close();
-      this.db = null;
+  async close() {
+    if (this._db) {
+      await this._db.destroy();
+      this._db = null;
       console.log('[Database] Connection closed');
     }
   }
@@ -151,17 +221,18 @@ class DatabaseService {
   /**
    * Get database stats
    */
-  stats() {
-    const db = this.get();
-    const subscribers = db.prepare('SELECT COUNT(*) as count FROM subscribers').get() as { count: number };
-    const alerts = db.prepare('SELECT COUNT(*) as count FROM alerts').get() as { count: number };
-    const publishers = db.prepare('SELECT COUNT(*) as count FROM publishers').get() as { count: number };
+  async stats() {
+    const db = await this.get();
+    
+    const [subscribers] = await db('subscribers').count('* as count');
+    const [alerts] = await db('alerts').count('* as count');
+    const [publishers] = await db('publishers').count('* as count');
     
     return {
-      subscribers: subscribers.count,
-      alerts: alerts.count,
-      publishers: publishers.count,
-      path: DB_PATH
+      subscribers: Number(subscribers.count),
+      alerts: Number(alerts.count),
+      publishers: Number(publishers.count),
+      type: this._isPostgres ? 'postgresql' : 'sqlite'
     };
   }
 }
@@ -169,5 +240,8 @@ class DatabaseService {
 // Singleton instance
 export const database = new DatabaseService();
 
-// Initialize on import
-database.init();
+// Initialize on import (async)
+database.init().catch(err => {
+  console.error('[Database] Failed to initialize:', err);
+  process.exit(1);
+});

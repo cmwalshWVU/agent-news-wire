@@ -17,6 +17,7 @@ async function main() {
   await solanaClient.loadDistributorWallet();
   const stats = await solanaClient.getStats();
   console.log('[Solana] Connected to devnet. Protocol stats:', stats);
+  
   // Create Fastify instance
   const fastify = Fastify({
     logger: {
@@ -50,7 +51,6 @@ async function main() {
       const content = await fs.readFile(skillPath, 'utf-8');
       reply.type('text/markdown; charset=utf-8').send(content);
     } catch {
-      // Fallback to local path
       try {
         const content = await fs.readFile(path.join(process.cwd(), 'public', 'skill.md'), 'utf-8');
         reply.type('text/markdown; charset=utf-8').send(content);
@@ -74,32 +74,39 @@ async function main() {
       return;
     }
 
-    const subscriber = subscriptionStore.get(subscriberId);
-    if (!subscriber) {
-      socket.send(JSON.stringify({ 
-        type: 'error', 
-        message: 'Subscription not found. Create one via POST /api/subscribe' 
-      }));
-      socket.close();
-      return;
-    }
-
-    // Register with distributor
-    distributor.addClient(socket, subscriberId, subscriber.channels as Channel[]);
-
-    // Handle incoming messages (e.g., channel updates)
-    socket.on('message', (data: Buffer | ArrayBuffer | Buffer[]) => {
-      try {
-        const message = JSON.parse(data.toString());
-        
-        if (message.type === 'update_channels') {
-          const channels = message.channels as Channel[];
-          subscriptionStore.updateChannels(subscriberId, channels);
-          distributor.updateClientChannels(subscriberId, channels);
-        }
-      } catch (error) {
-        console.error('WebSocket message error:', error);
+    // Handle async subscriber lookup
+    (async () => {
+      const subscriber = await subscriptionStore.get(subscriberId);
+      if (!subscriber) {
+        socket.send(JSON.stringify({ 
+          type: 'error', 
+          message: 'Subscription not found. Create one via POST /api/subscribe' 
+        }));
+        socket.close();
+        return;
       }
+
+      // Register with distributor
+      distributor.addClient(socket, subscriberId, subscriber.channels as Channel[]);
+
+      // Handle incoming messages
+      socket.on('message', (data: Buffer | ArrayBuffer | Buffer[]) => {
+        try {
+          const message = JSON.parse(data.toString());
+          
+          if (message.type === 'update_channels') {
+            const channels = message.channels as Channel[];
+            subscriptionStore.updateChannels(subscriberId, channels);
+            distributor.updateClientChannels(subscriberId, channels);
+          }
+        } catch (error) {
+          console.error('WebSocket message error:', error);
+        }
+      });
+    })().catch(err => {
+      console.error('WebSocket setup error:', err);
+      socket.send(JSON.stringify({ type: 'error', message: 'Internal error' }));
+      socket.close();
     });
   });
 
@@ -108,7 +115,7 @@ async function main() {
     secEnabled: true,
     defiLlamaEnabled: true,
     whaleAlertEnabled: true,
-    mockWhales: !process.env.WHALE_ALERT_API_KEY // Use mock if no API key
+    mockWhales: !process.env.WHALE_ALERT_API_KEY
   });
 
   // Wire ingestion to distribution

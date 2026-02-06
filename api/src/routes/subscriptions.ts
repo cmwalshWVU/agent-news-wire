@@ -9,9 +9,6 @@ import { TRIAL_MODE, getEffectiveConfig } from '../config/trial.js';
 export async function subscriptionRoutes(fastify: FastifyInstance) {
   /**
    * POST /api/subscribe - Create a new subscription
-   * 
-   * If walletAddress is provided, will check/sync on-chain state.
-   * To create on-chain subscriber, user must call createSubscriber via SDK.
    */
   fastify.post('/api/subscribe', async (request, reply) => {
     try {
@@ -23,7 +20,6 @@ export async function subscriptionRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Use async subscribe to check on-chain state
       const subscriber = await subscriptionStore.subscribe(body);
       
       return {
@@ -51,13 +47,12 @@ export async function subscriptionRoutes(fastify: FastifyInstance) {
    */
   fastify.get('/api/subscription/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
-    const subscriber = subscriptionStore.get(id);
+    const subscriber = await subscriptionStore.get(id);
     
     if (!subscriber) {
       return reply.status(404).send({ error: 'Subscription not found' });
     }
 
-    // Fetch latest balance if on-chain
     const balance = await subscriptionStore.getBalance(id);
 
     return {
@@ -74,12 +69,6 @@ export async function subscriptionRoutes(fastify: FastifyInstance) {
 
   /**
    * POST /api/deposit - Deposit USDC to subscription balance
-   * 
-   * For on-chain subscribers, this refreshes balance from chain.
-   * For mock subscribers, this adds to local balance.
-   * 
-   * Note: Actual USDC deposits happen via Solana wallet interactions,
-   * not this endpoint. This endpoint is for balance refresh/mock deposits.
    */
   fastify.post('/api/deposit', async (request, reply) => {
     const { subscriberId, amount } = request.body as { 
@@ -111,18 +100,15 @@ export async function subscriptionRoutes(fastify: FastifyInstance) {
 
   /**
    * GET /api/balance/:id - Check balance and runway
-   * 
-   * For on-chain subscribers, fetches live balance from Solana.
    */
   fastify.get('/api/balance/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
-    const subscriber = subscriptionStore.get(id);
+    const subscriber = await subscriptionStore.get(id);
     
     if (!subscriber) {
       return reply.status(404).send({ error: 'Subscription not found' });
     }
 
-    // Fetch latest balance (may query on-chain)
     const balance = await subscriptionStore.getBalance(id);
 
     const config = getEffectiveConfig();
@@ -153,13 +139,12 @@ export async function subscriptionRoutes(fastify: FastifyInstance) {
       return reply.status(400).send({ error: 'At least one channel required' });
     }
 
-    const subscriber = subscriptionStore.updateChannels(id, channels);
+    const subscriber = await subscriptionStore.updateChannels(id, channels);
     
     if (!subscriber) {
       return reply.status(404).send({ error: 'Subscription not found' });
     }
 
-    // Update WebSocket client if connected
     distributor.updateClientChannels(id, channels);
 
     return {
@@ -170,9 +155,6 @@ export async function subscriptionRoutes(fastify: FastifyInstance) {
 
   /**
    * POST /api/subscription/create-tx - Build on-chain subscription transaction
-   * 
-   * Returns a base64-encoded transaction for the user to sign with their wallet.
-   * After signing, user submits the transaction to Solana.
    */
   fastify.post('/api/subscription/create-tx', async (request, reply) => {
     const { walletAddress, channels } = request.body as {
@@ -225,8 +207,6 @@ export async function subscriptionRoutes(fastify: FastifyInstance) {
 
   /**
    * POST /api/subscription/deposit-tx - Build USDC deposit transaction
-   * 
-   * Returns a base64-encoded transaction to deposit USDC into subscriber vault.
    */
   fastify.post('/api/subscription/deposit-tx', async (request, reply) => {
     const { walletAddress, amount } = request.body as {
@@ -276,8 +256,6 @@ export async function subscriptionRoutes(fastify: FastifyInstance) {
 
   /**
    * GET /api/subscription/pda/:wallet - Get PDA addresses for a wallet
-   * 
-   * Returns the PDA addresses that will be created for this wallet.
    */
   fastify.get('/api/subscription/pda/:wallet', async (request, reply) => {
     const { wallet } = request.params as { wallet: string };
@@ -326,7 +304,7 @@ export async function subscriptionRoutes(fastify: FastifyInstance) {
   fastify.delete('/api/subscription/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     
-    const success = subscriptionStore.unsubscribe(id);
+    const success = await subscriptionStore.unsubscribe(id);
     
     if (!success) {
       return reply.status(404).send({ error: 'Subscription not found' });

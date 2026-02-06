@@ -22,7 +22,7 @@ export async function alertRoutes(fastify: FastifyInstance) {
 
     // Charge for historical queries if subscriber provided
     if (subscriberId) {
-      const charged = subscriptionStore.charge(subscriberId, QUERY_PRICE);
+      const charged = await subscriptionStore.charge(subscriberId, QUERY_PRICE);
       if (!charged) {
         return reply.status(402).send({ 
           error: 'Insufficient balance',
@@ -32,8 +32,8 @@ export async function alertRoutes(fastify: FastifyInstance) {
     }
 
     const alerts = channel 
-      ? alertStore.getByChannel(channel, Math.min(limit, 100))
-      : alertStore.getRecent(Math.min(limit, 100));
+      ? await alertStore.getByChannel(channel, Math.min(limit, 100))
+      : await alertStore.getRecent(Math.min(limit, 100));
 
     return {
       alerts,
@@ -48,7 +48,7 @@ export async function alertRoutes(fastify: FastifyInstance) {
   fastify.get('/api/alerts/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
     
-    const alert = alertStore.get(id);
+    const alert = await alertStore.get(id);
     
     if (!alert) {
       return reply.status(404).send({ error: 'Alert not found' });

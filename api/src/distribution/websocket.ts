@@ -55,37 +55,35 @@ export class AlertDistributor {
       this.clients.delete(subscriberId);
     });
 
-    // Backfill recent alerts for subscribed channels
+    // Backfill recent alerts (async)
     this.sendRecentAlerts(client);
   }
 
   /**
    * Send recent alerts to a newly connected client (backfill)
    */
-  private sendRecentAlerts(client: WebSocketClient, limit = 10) {
-    const recentAlerts = alertStore.getRecent(100);
+  private async sendRecentAlerts(client: WebSocketClient, limit = 10) {
+    const recentAlerts = await alertStore.getRecent(100);
     let sent = 0;
 
     for (const alert of recentAlerts) {
       if (sent >= limit) break;
       
-      // Only send alerts matching client's subscribed channels
       if (!client.channels.has(alert.channel)) continue;
 
       this.sendToClient(client, {
         type: 'alert',
         alert,
-        charged: 0, // Backfill is free
+        charged: 0,
         backfill: true
       });
       sent++;
     }
 
     if (sent > 0) {
-      // Increment alertsReceived for backfill alerts too
-      // This is batched as a single increment for efficiency
+      // Increment alertsReceived for backfill alerts
       for (let i = 0; i < sent; i++) {
-        subscriptionStore.incrementAlertsReceived(client.subscriberId);
+        await subscriptionStore.incrementAlertsReceived(client.subscriberId);
       }
       console.log(`[WS] Sent ${sent} backfill alerts to ${client.subscriberId}`);
     }
@@ -133,17 +131,14 @@ export class AlertDistributor {
     console.log(`[WS] Distributing alert ${alert.alertId} (channel: ${alert.channel}) to ${this.clients.size} connected client(s)`);
 
     for (const [subscriberId, client] of this.clients) {
-      // Check if client is subscribed to this channel
       if (!client.channels.has(alert.channel)) {
-        console.log(`[WS] Client ${subscriberId} not subscribed to ${alert.channel} (has: ${Array.from(client.channels).join(', ')})`);
+        console.log(`[WS] Client ${subscriberId} not subscribed to ${alert.channel}`);
         continue;
       }
 
-      // In trial mode or if price is 0, skip balance check
       if (pricePerAlert > 0) {
-        const charged = subscriptionStore.charge(subscriberId, pricePerAlert);
+        const charged = await subscriptionStore.charge(subscriberId, pricePerAlert);
         if (!charged) {
-          // Send low balance warning
           this.sendToClient(client, {
             type: 'warning',
             code: 'LOW_BALANCE',
@@ -152,18 +147,16 @@ export class AlertDistributor {
           continue;
         }
       } else {
-        // Trial mode: still increment alerts received counter
-        subscriptionStore.incrementAlertsReceived(subscriberId);
+        await subscriptionStore.incrementAlertsReceived(subscriberId);
       }
 
-      // Send the alert
       this.sendToClient(client, {
         type: 'alert',
         alert,
         charged: pricePerAlert
       });
 
-      console.log(`[WS] ✅ Delivered alert to ${subscriberId}, incrementing alertsReceived`);
+      console.log(`[WS] ✅ Delivered alert to ${subscriberId}`);
       recipients.push(subscriberId);
       this.alertsSent++;
       this.revenueGenerated += pricePerAlert;
@@ -177,7 +170,7 @@ export class AlertDistributor {
   }
 
   /**
-   * Broadcast to all clients (system messages)
+   * Broadcast to all clients
    */
   broadcast(message: object) {
     for (const client of this.clients.values()) {

@@ -37,21 +37,21 @@ interface IngestionConfig {
 
 const DEFAULT_CONFIG: IngestionConfig = {
   secEnabled: true,
-  secIntervalMs: 10 * 60 * 1000, // 10 minutes
+  secIntervalMs: 10 * 60 * 1000,
   cftcEnabled: true,
-  cftcIntervalMs: 10 * 60 * 1000, // 10 minutes
-  mockCFTC: false, // CFTC RSS is reliable
+  cftcIntervalMs: 10 * 60 * 1000,
+  mockCFTC: false,
   defiLlamaEnabled: true,
-  defiLlamaIntervalMs: 5 * 60 * 1000, // 5 minutes
+  defiLlamaIntervalMs: 5 * 60 * 1000,
   whaleAlertEnabled: true,
   whaleAlertApiKey: process.env.WHALE_ALERT_API_KEY,
-  whaleAlertIntervalMs: 60 * 1000, // 1 minute
-  mockWhales: true, // Use mock data for demo
+  whaleAlertIntervalMs: 60 * 1000,
+  mockWhales: true,
   hacksEnabled: true,
-  hacksIntervalMs: 5 * 60 * 1000, // 5 minutes
-  mockHacks: false, // DeFiLlama hacks API is reliable
+  hacksIntervalMs: 5 * 60 * 1000,
+  mockHacks: false,
   genfinityEnabled: true,
-  genfinityIntervalMs: 5 * 60 * 1000 // 5 minutes
+  genfinityIntervalMs: 5 * 60 * 1000
 };
 
 /**
@@ -67,20 +67,13 @@ export class IngestionEngine {
     this.config = { ...DEFAULT_CONFIG, ...config };
   }
 
-  /**
-   * Register a handler for new alerts
-   */
   onAlert(handler: AlertHandler) {
     this.handlers.push(handler);
   }
 
-  /**
-   * Process alerts through the pipeline
-   */
   private async processAlerts(alerts: Alert[]) {
     console.log(`[Ingestion] processAlerts called with ${alerts.length} alert(s), ${this.handlers.length} handler(s) registered`);
     for (const alert of alerts) {
-      // Notify all handlers
       for (const handler of this.handlers) {
         try {
           console.log(`[Ingestion] Calling handler for alert: ${alert.alertId}`);
@@ -92,16 +85,13 @@ export class IngestionEngine {
     }
   }
 
-  /**
-   * Run SEC poller
-   */
   private async pollSEC() {
     console.log('[Ingestion] Polling SEC EDGAR...');
     const inputs = await fetchSECFilings();
     const alerts: Alert[] = [];
     
     for (const input of inputs) {
-      const alert = alertStore.add(input);
+      const alert = await alertStore.add(input);
       if (alert) {
         console.log(`[Ingestion] New SEC alert: ${alert.headline}`);
         alerts.push(alert);
@@ -114,9 +104,6 @@ export class IngestionEngine {
     console.log(`[Ingestion] SEC: ${inputs.length} items, ${alerts.length} new alerts`);
   }
 
-  /**
-   * Run DeFiLlama pollers
-   */
   private async pollDeFiLlama() {
     console.log('[Ingestion] Polling DeFiLlama...');
     const yieldInputs = await fetchYieldAlerts();
@@ -125,7 +112,7 @@ export class IngestionEngine {
     const alerts: Alert[] = [];
     
     for (const input of allInputs) {
-      const alert = alertStore.add(input);
+      const alert = await alertStore.add(input);
       if (alert) {
         console.log(`[Ingestion] New DeFi alert: ${alert.headline}`);
         alerts.push(alert);
@@ -138,9 +125,6 @@ export class IngestionEngine {
     console.log(`[Ingestion] DeFiLlama: ${allInputs.length} items, ${alerts.length} new alerts`);
   }
 
-  /**
-   * Run Whale Alert poller
-   */
   private async pollWhaleAlert() {
     console.log('[Ingestion] Polling Whale Alert...');
     
@@ -153,7 +137,7 @@ export class IngestionEngine {
     
     const alerts: Alert[] = [];
     for (const input of inputs) {
-      const alert = alertStore.add(input);
+      const alert = await alertStore.add(input);
       if (alert) {
         console.log(`[Ingestion] New whale alert: ${alert.headline}`);
         alerts.push(alert);
@@ -166,16 +150,13 @@ export class IngestionEngine {
     console.log(`[Ingestion] WhaleAlert: ${inputs.length} items, ${alerts.length} new alerts`);
   }
 
-  /**
-   * Run Genfinity poller
-   */
   private async pollGenfinity() {
     console.log('[Ingestion] Polling Genfinity...');
     const inputs = await fetchGenfinityNews();
     const alerts: Alert[] = [];
     
     for (const input of inputs) {
-      const alert = alertStore.add(input);
+      const alert = await alertStore.add(input);
       if (alert) {
         console.log(`[Ingestion] New Genfinity alert: ${alert.headline}`);
         alerts.push(alert);
@@ -188,9 +169,6 @@ export class IngestionEngine {
     console.log(`[Ingestion] Genfinity: ${inputs.length} items, ${alerts.length} new alerts`);
   }
 
-  /**
-   * Run CFTC poller
-   */
   private async pollCFTC() {
     console.log('[Ingestion] Polling CFTC...');
     
@@ -203,7 +181,7 @@ export class IngestionEngine {
     
     const alerts: Alert[] = [];
     for (const input of inputs) {
-      const alert = alertStore.add(input);
+      const alert = await alertStore.add(input);
       if (alert) {
         console.log(`[Ingestion] New CFTC alert: ${alert.headline}`);
         alerts.push(alert);
@@ -216,9 +194,6 @@ export class IngestionEngine {
     console.log(`[Ingestion] CFTC: ${inputs.length} items, ${alerts.length} new alerts`);
   }
 
-  /**
-   * Run Hacks/Exploits poller (DeFiLlama + Rekt News)
-   */
   private async pollHacks() {
     console.log('[Ingestion] Polling Hacks (DeFiLlama + Rekt)...');
     
@@ -231,7 +206,7 @@ export class IngestionEngine {
     
     const alerts: Alert[] = [];
     for (const input of inputs) {
-      const alert = alertStore.add(input);
+      const alert = await alertStore.add(input);
       if (alert) {
         console.log(`[Ingestion] New hack alert: ${alert.headline}`);
         alerts.push(alert);
@@ -244,64 +219,45 @@ export class IngestionEngine {
     console.log(`[Ingestion] Hacks: ${inputs.length} items, ${alerts.length} new alerts`);
   }
 
-  /**
-   * Start all pollers
-   */
   async start() {
     if (this.running) return;
     this.running = true;
     
     console.log('[Ingestion] Starting ingestion engine...');
 
-    // Run initial polls
     if (this.config.secEnabled) {
       await this.pollSEC();
-      this.intervals.push(
-        setInterval(() => this.pollSEC(), this.config.secIntervalMs)
-      );
+      this.intervals.push(setInterval(() => this.pollSEC(), this.config.secIntervalMs));
     }
 
     if (this.config.defiLlamaEnabled) {
       await this.pollDeFiLlama();
-      this.intervals.push(
-        setInterval(() => this.pollDeFiLlama(), this.config.defiLlamaIntervalMs)
-      );
+      this.intervals.push(setInterval(() => this.pollDeFiLlama(), this.config.defiLlamaIntervalMs));
     }
 
     if (this.config.whaleAlertEnabled) {
       await this.pollWhaleAlert();
-      this.intervals.push(
-        setInterval(() => this.pollWhaleAlert(), this.config.whaleAlertIntervalMs)
-      );
+      this.intervals.push(setInterval(() => this.pollWhaleAlert(), this.config.whaleAlertIntervalMs));
     }
 
     if (this.config.genfinityEnabled) {
       await this.pollGenfinity();
-      this.intervals.push(
-        setInterval(() => this.pollGenfinity(), this.config.genfinityIntervalMs)
-      );
+      this.intervals.push(setInterval(() => this.pollGenfinity(), this.config.genfinityIntervalMs));
     }
 
     if (this.config.cftcEnabled) {
       await this.pollCFTC();
-      this.intervals.push(
-        setInterval(() => this.pollCFTC(), this.config.cftcIntervalMs)
-      );
+      this.intervals.push(setInterval(() => this.pollCFTC(), this.config.cftcIntervalMs));
     }
 
     if (this.config.hacksEnabled) {
       await this.pollHacks();
-      this.intervals.push(
-        setInterval(() => this.pollHacks(), this.config.hacksIntervalMs)
-      );
+      this.intervals.push(setInterval(() => this.pollHacks(), this.config.hacksIntervalMs));
     }
 
     console.log('[Ingestion] Engine started');
   }
 
-  /**
-   * Stop all pollers
-   */
   stop() {
     this.running = false;
     for (const interval of this.intervals) {
@@ -311,16 +267,13 @@ export class IngestionEngine {
     console.log('[Ingestion] Engine stopped');
   }
 
-  /**
-   * Run a single poll cycle (for testing)
-   */
   async pollOnce() {
     const alerts: Alert[] = [];
     
     if (this.config.secEnabled) {
       const inputs = await fetchSECFilings();
       for (const input of inputs) {
-        const alert = alertStore.add(input);
+        const alert = await alertStore.add(input);
         if (alert) alerts.push(alert);
       }
     }
@@ -329,7 +282,7 @@ export class IngestionEngine {
       const yieldInputs = await fetchYieldAlerts();
       const tvlInputs = await fetchTVLAlerts();
       for (const input of [...yieldInputs, ...tvlInputs]) {
-        const alert = alertStore.add(input);
+        const alert = await alertStore.add(input);
         if (alert) alerts.push(alert);
       }
     }
@@ -339,7 +292,7 @@ export class IngestionEngine {
         ? generateMockWhaleAlerts() 
         : await fetchWhaleAlerts(this.config.whaleAlertApiKey);
       for (const input of inputs) {
-        const alert = alertStore.add(input);
+        const alert = await alertStore.add(input);
         if (alert) alerts.push(alert);
       }
     }
@@ -347,7 +300,7 @@ export class IngestionEngine {
     if (this.config.genfinityEnabled) {
       const inputs = await fetchGenfinityNews();
       for (const input of inputs) {
-        const alert = alertStore.add(input);
+        const alert = await alertStore.add(input);
         if (alert) alerts.push(alert);
       }
     }
@@ -357,7 +310,7 @@ export class IngestionEngine {
         ? generateMockCFTCAlerts()
         : await fetchCFTCReleases();
       for (const input of inputs) {
-        const alert = alertStore.add(input);
+        const alert = await alertStore.add(input);
         if (alert) alerts.push(alert);
       }
     }
@@ -367,7 +320,7 @@ export class IngestionEngine {
         ? generateMockHackAlerts()
         : await fetchHackAlerts();
       for (const input of inputs) {
-        const alert = alertStore.add(input);
+        const alert = await alertStore.add(input);
         if (alert) alerts.push(alert);
       }
     }

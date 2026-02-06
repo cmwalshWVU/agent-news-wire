@@ -6,7 +6,6 @@ import {
   PublishAlertRequest,
   Channel 
 } from '../types/index.js';
-import { v4 as uuid } from 'uuid';
 
 /**
  * Publisher routes for agent-based alert publishing
@@ -15,8 +14,6 @@ export async function publisherRoutes(fastify: FastifyInstance) {
   
   /**
    * POST /api/publishers/register - Register as a publisher
-   * 
-   * Returns API key (shown only once!) for authentication
    */
   fastify.post('/api/publishers/register', async (request, reply) => {
     try {
@@ -34,7 +31,7 @@ export async function publisherRoutes(fastify: FastifyInstance) {
         });
       }
 
-      const { publisher, apiKey } = publisherStore.register(body);
+      const { publisher, apiKey } = await publisherStore.register(body);
 
       return {
         success: true,
@@ -61,12 +58,9 @@ export async function publisherRoutes(fastify: FastifyInstance) {
 
   /**
    * POST /api/alerts/publish - Publish an alert (authenticated)
-   * 
-   * Requires: Authorization: Bearer <api_key>
    */
   fastify.post('/api/alerts/publish', async (request, reply) => {
     try {
-      // Extract API key from Authorization header
       const authHeader = request.headers.authorization;
       if (!authHeader || !authHeader.startsWith('Bearer ')) {
         return reply.status(401).send({ 
@@ -75,7 +69,7 @@ export async function publisherRoutes(fastify: FastifyInstance) {
       }
 
       const apiKey = authHeader.slice(7);
-      const publisher = publisherStore.authenticate(apiKey);
+      const publisher = await publisherStore.authenticate(apiKey);
 
       if (!publisher) {
         return reply.status(401).send({ error: 'Invalid API key' });
@@ -83,7 +77,6 @@ export async function publisherRoutes(fastify: FastifyInstance) {
 
       const body = request.body as PublishAlertRequest;
 
-      // Validate required fields
       if (!body.channel) {
         return reply.status(400).send({ error: 'Channel is required' });
       }
@@ -97,15 +90,14 @@ export async function publisherRoutes(fastify: FastifyInstance) {
         return reply.status(400).send({ error: 'Source URL is required' });
       }
 
-      // Check if publisher can post to this channel
-      if (!publisherStore.canPublishTo(publisher.id, body.channel)) {
+      const canPublish = await publisherStore.canPublishTo(publisher.id, body.channel);
+      if (!canPublish) {
         return reply.status(403).send({ 
           error: `Not authorized to publish to channel: ${body.channel}`,
           authorizedChannels: publisher.channels
         });
       }
 
-      // Create the alert
       const alertInput = {
         channel: body.channel,
         priority: body.priority || 'medium',
@@ -122,7 +114,7 @@ export async function publisherRoutes(fastify: FastifyInstance) {
         publisherName: publisher.name
       };
 
-      const alert = alertStore.add(alertInput);
+      const alert = await alertStore.add(alertInput);
 
       if (!alert) {
         return reply.status(409).send({ 
@@ -130,17 +122,14 @@ export async function publisherRoutes(fastify: FastifyInstance) {
         });
       }
 
-      // Increment publisher stats
-      publisherStore.incrementPublished(publisher.id);
+      await publisherStore.incrementPublished(publisher.id);
 
-      // Distribute to subscribers
       const recipients = await distributor.distribute(alert);
       const deliveryCount = recipients.length;
 
-      // Track consumption for publisher reputation
       if (deliveryCount > 0) {
         for (let i = 0; i < deliveryCount; i++) {
-          publisherStore.incrementConsumed(publisher.id);
+          await publisherStore.incrementConsumed(publisher.id);
         }
       }
 
@@ -177,13 +166,12 @@ export async function publisherRoutes(fastify: FastifyInstance) {
     const limit = parseInt(query.limit || '50');
     const includeInactive = query.includeInactive === 'true';
 
-    const publishers = publisherStore.list(limit, includeInactive);
-    const stats = publisherStore.stats();
+    const [publishers, stats] = await Promise.all([
+      publisherStore.list(limit, includeInactive),
+      publisherStore.stats()
+    ]);
 
-    return {
-      publishers,
-      stats
-    };
+    return { publishers, stats };
   });
 
   /**
@@ -194,7 +182,7 @@ export async function publisherRoutes(fastify: FastifyInstance) {
     const limit = parseInt(query.limit || '20');
 
     return {
-      leaderboard: publisherStore.getLeaderboard(limit)
+      leaderboard: await publisherStore.getLeaderboard(limit)
     };
   });
 
@@ -203,18 +191,14 @@ export async function publisherRoutes(fastify: FastifyInstance) {
    */
   fastify.get('/api/publishers/:id', async (request, reply) => {
     const { id } = request.params as { id: string };
-    const publisher = publisherStore.get(id);
+    const publisher = await publisherStore.get(id);
 
     if (!publisher) {
       return reply.status(404).send({ error: 'Publisher not found' });
     }
 
-    // Return public info only
     const { apiKey, ...publicInfo } = publisher;
-
-    return {
-      publisher: publicInfo
-    };
+    return { publisher: publicInfo };
   });
 
   /**
@@ -225,16 +209,12 @@ export async function publisherRoutes(fastify: FastifyInstance) {
     const query = request.query as { limit?: string };
     const limit = parseInt(query.limit || '50');
 
-    const publisher = publisherStore.get(id);
+    const publisher = await publisherStore.get(id);
     if (!publisher) {
       return reply.status(404).send({ error: 'Publisher not found' });
     }
 
-    // Get recent alerts and filter by publisher
-    const allAlerts = alertStore.getRecent(500);
-    const publisherAlerts = allAlerts
-      .filter(a => a.publisherId === id)
-      .slice(0, limit);
+    const publisherAlerts = await alertStore.getByPublisher(id, limit);
 
     return {
       publisher: {
@@ -252,22 +232,17 @@ export async function publisherRoutes(fastify: FastifyInstance) {
   fastify.get('/api/my-publisher', async (request, reply) => {
     const authHeader = request.headers.authorization;
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      return reply.status(401).send({ 
-        error: 'Authorization required' 
-      });
+      return reply.status(401).send({ error: 'Authorization required' });
     }
 
     const apiKey = authHeader.slice(7);
-    const publisher = publisherStore.authenticate(apiKey);
+    const publisher = await publisherStore.authenticate(apiKey);
 
     if (!publisher) {
       return reply.status(401).send({ error: 'Invalid API key' });
     }
 
     const { apiKey: _, ...publicInfo } = publisher;
-
-    return {
-      publisher: publicInfo
-    };
+    return { publisher: publicInfo };
   });
 }

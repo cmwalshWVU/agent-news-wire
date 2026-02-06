@@ -17,44 +17,40 @@ interface PublisherRow {
   alerts_consumed: number;
   reputation_score: number;
   stake: number;
-  on_chain: number;
+  on_chain: boolean | number;
   publisher_pda: string | null;
 }
 
 /**
- * Persistent publisher store using SQLite
+ * Persistent publisher store using Knex (SQLite/PostgreSQL)
  * Manages publisher registration, authentication, and reputation
  */
 export class PublisherStore {
-  // In-memory caches for fast lookups
-  private byApiKeyHash: Map<string, string> = new Map(); // hash -> publisherId
-  private byName: Map<string, string> = new Map(); // name -> publisherId
-  private byWallet: Map<string, string> = new Map(); // wallet -> publisherId
-
-  constructor() {
-    this.loadCaches();
-  }
+  private apiKeyCache: Map<string, string> = new Map(); // hash -> publisherId
+  private nameCache: Map<string, string> = new Map(); // name -> publisherId
+  private walletCache: Map<string, string> = new Map(); // wallet -> publisherId
+  private initialized = false;
 
   /**
-   * Load caches from database
+   * Initialize caches from database
    */
-  private loadCaches() {
-    const db = database.get();
-    const rows = db.prepare('SELECT id, name, api_key, wallet_address FROM publishers').all() as {
-      id: string;
-      name: string;
-      api_key: string;
-      wallet_address: string | null;
-    }[];
+  async init() {
+    if (this.initialized) return;
+    
+    const db = await database.get();
+    const rows = await db('publishers')
+      .select('id', 'name', 'api_key', 'wallet_address');
 
     for (const row of rows) {
-      this.byApiKeyHash.set(row.api_key, row.id);
-      this.byName.set(row.name.toLowerCase(), row.id);
+      this.apiKeyCache.set(row.api_key, row.id);
+      this.nameCache.set(row.name.toLowerCase(), row.id);
       if (row.wallet_address) {
-        this.byWallet.set(row.wallet_address, row.id);
+        this.walletCache.set(row.wallet_address, row.id);
       }
     }
-    console.log(`[PublisherStore] Loaded ${rows.length} publishers from database`);
+    
+    console.log(`[PublisherStore] Loaded ${rows.length} publishers`);
+    this.initialized = true;
   }
 
   /**
@@ -75,7 +71,7 @@ export class PublisherStore {
       alertsConsumed: row.alerts_consumed,
       reputationScore: row.reputation_score,
       stake: row.stake,
-      onChain: row.on_chain === 1,
+      onChain: Boolean(row.on_chain),
       publisherPDA: row.publisher_pda || undefined
     };
   }
@@ -99,18 +95,18 @@ export class PublisherStore {
 
   /**
    * Register a new publisher
-   * Returns the publisher object WITH the raw API key (only time it's shown)
    */
-  register(request: PublisherRegisterRequest): { publisher: Publisher; apiKey: string } {
-    const db = database.get();
+  async register(request: PublisherRegisterRequest): Promise<{ publisher: Publisher; apiKey: string }> {
+    await this.init();
+    const db = await database.get();
 
     // Check for duplicate name
-    if (this.byName.has(request.name.toLowerCase())) {
+    if (this.nameCache.has(request.name.toLowerCase())) {
       throw new Error('Publisher name already taken');
     }
 
     // Check for duplicate wallet
-    if (request.walletAddress && this.byWallet.has(request.walletAddress)) {
+    if (request.walletAddress && this.walletCache.has(request.walletAddress)) {
       throw new Error('Wallet already registered as a publisher');
     }
 
@@ -134,40 +130,32 @@ export class PublisherStore {
     };
 
     // Insert into database
-    const stmt = db.prepare(`
-      INSERT INTO publishers (
-        id, name, description, wallet_address, api_key, api_key_prefix,
-        channels, status, created_at, alerts_published, alerts_consumed,
-        reputation_score, stake, on_chain, publisher_pda
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    stmt.run(
-      publisher.id,
-      publisher.name,
-      publisher.description || null,
-      publisher.walletAddress || null,
-      publisher.apiKey,
-      publisher.apiKeyPrefix,
-      JSON.stringify(publisher.channels),
-      publisher.status,
-      publisher.createdAt,
-      publisher.alertsPublished,
-      publisher.alertsConsumed,
-      publisher.reputationScore,
-      publisher.stake,
-      publisher.onChain ? 1 : 0,
-      publisher.publisherPDA || null
-    );
+    await db('publishers').insert({
+      id: publisher.id,
+      name: publisher.name,
+      description: publisher.description || null,
+      wallet_address: publisher.walletAddress || null,
+      api_key: publisher.apiKey,
+      api_key_prefix: publisher.apiKeyPrefix,
+      channels: JSON.stringify(publisher.channels),
+      status: publisher.status,
+      created_at: publisher.createdAt,
+      alerts_published: publisher.alertsPublished,
+      alerts_consumed: publisher.alertsConsumed,
+      reputation_score: publisher.reputationScore,
+      stake: publisher.stake,
+      on_chain: publisher.onChain,
+      publisher_pda: publisher.publisherPDA || null
+    });
 
     // Update caches
-    this.byApiKeyHash.set(hash, publisher.id);
-    this.byName.set(request.name.toLowerCase(), publisher.id);
+    this.apiKeyCache.set(hash, publisher.id);
+    this.nameCache.set(request.name.toLowerCase(), publisher.id);
     if (request.walletAddress) {
-      this.byWallet.set(request.walletAddress, publisher.id);
+      this.walletCache.set(request.walletAddress, publisher.id);
     }
 
-    console.log(`[PublisherStore] Registered new publisher: ${publisher.name} (${publisher.id})`);
+    console.log(`[PublisherStore] Registered: ${publisher.name} (${publisher.id})`);
 
     return { publisher, apiKey: key };
   }
@@ -175,19 +163,21 @@ export class PublisherStore {
   /**
    * Authenticate by API key
    */
-  authenticate(apiKey: string): Publisher | null {
+  async authenticate(apiKey: string): Promise<Publisher | null> {
+    await this.init();
+    
     if (!apiKey || !apiKey.startsWith('anw_')) {
       return null;
     }
 
     const hash = this.hashApiKey(apiKey);
-    const publisherId = this.byApiKeyHash.get(hash);
+    const publisherId = this.apiKeyCache.get(hash);
     
     if (!publisherId) {
       return null;
     }
 
-    const publisher = this.get(publisherId);
+    const publisher = await this.get(publisherId);
     
     if (!publisher || publisher.status !== 'active') {
       return null;
@@ -199,25 +189,29 @@ export class PublisherStore {
   /**
    * Get publisher by ID
    */
-  get(id: string): Publisher | undefined {
-    const db = database.get();
-    const row = db.prepare('SELECT * FROM publishers WHERE id = ?').get(id) as PublisherRow | undefined;
+  async get(id: string): Promise<Publisher | undefined> {
+    const db = await database.get();
+    const row = await db('publishers')
+      .where('id', id)
+      .first() as PublisherRow | undefined;
+    
     return row ? this.rowToPublisher(row) : undefined;
   }
 
   /**
    * Get publisher by name
    */
-  getByName(name: string): Publisher | undefined {
-    const id = this.byName.get(name.toLowerCase());
+  async getByName(name: string): Promise<Publisher | undefined> {
+    await this.init();
+    const id = this.nameCache.get(name.toLowerCase());
     return id ? this.get(id) : undefined;
   }
 
   /**
    * Check if publisher can post to a channel
    */
-  canPublishTo(publisherId: string, channel: Channel): boolean {
-    const publisher = this.get(publisherId);
+  async canPublishTo(publisherId: string, channel: Channel): Promise<boolean> {
+    const publisher = await this.get(publisherId);
     if (!publisher || publisher.status !== 'active') {
       return false;
     }
@@ -227,87 +221,93 @@ export class PublisherStore {
   /**
    * Increment alerts published counter
    */
-  incrementPublished(publisherId: string): void {
-    const db = database.get();
-    db.prepare('UPDATE publishers SET alerts_published = alerts_published + 1 WHERE id = ?').run(publisherId);
+  async incrementPublished(publisherId: string): Promise<void> {
+    const db = await database.get();
+    await db('publishers')
+      .where('id', publisherId)
+      .increment('alerts_published', 1);
   }
 
   /**
    * Increment alerts consumed counter
    */
-  incrementConsumed(publisherId: string): void {
-    const db = database.get();
-    db.prepare(`
-      UPDATE publishers 
-      SET alerts_consumed = alerts_consumed + 1,
-          reputation_score = MIN(100, reputation_score + 0.1)
-      WHERE id = ?
-    `).run(publisherId);
+  async incrementConsumed(publisherId: string): Promise<void> {
+    const db = await database.get();
+    await db('publishers')
+      .where('id', publisherId)
+      .increment('alerts_consumed', 1)
+      .update({
+        reputation_score: db.raw('LEAST(100, reputation_score + 0.1)')
+      });
   }
 
   /**
    * Adjust reputation
    */
-  adjustReputation(publisherId: string, delta: number): void {
-    const db = database.get();
+  async adjustReputation(publisherId: string, delta: number): Promise<void> {
+    const db = await database.get();
     
-    // Update reputation and potentially suspend
-    db.prepare(`
-      UPDATE publishers 
-      SET reputation_score = MAX(0, MIN(100, reputation_score + ?)),
-          status = CASE WHEN MAX(0, MIN(100, reputation_score + ?)) < 10 THEN 'suspended' ELSE status END
-      WHERE id = ?
-    `).run(delta, delta, publisherId);
+    await db('publishers')
+      .where('id', publisherId)
+      .update({
+        reputation_score: db.raw('GREATEST(0, LEAST(100, reputation_score + ?))', [delta])
+      });
 
-    const publisher = this.get(publisherId);
+    // Check if should be suspended
+    const publisher = await this.get(publisherId);
     if (publisher && publisher.reputationScore < 10) {
-      console.log(`[PublisherStore] Suspended publisher due to low reputation: ${publisher.name}`);
+      await this.setStatus(publisherId, 'suspended');
+      console.log(`[PublisherStore] Suspended due to low reputation: ${publisher.name}`);
     }
   }
 
   /**
    * Update publisher status
    */
-  setStatus(publisherId: string, status: PublisherStatus): boolean {
-    const db = database.get();
-    const result = db.prepare('UPDATE publishers SET status = ? WHERE id = ?').run(status, publisherId);
-    return result.changes > 0;
+  async setStatus(publisherId: string, status: PublisherStatus): Promise<boolean> {
+    const db = await database.get();
+    const result = await db('publishers')
+      .where('id', publisherId)
+      .update({ status });
+    
+    return result > 0;
   }
 
   /**
    * Add stake
    */
-  addStake(publisherId: string, amount: number): boolean {
-    const db = database.get();
-    const result = db.prepare('UPDATE publishers SET stake = stake + ? WHERE id = ?').run(amount, publisherId);
-    return result.changes > 0;
+  async addStake(publisherId: string, amount: number): Promise<boolean> {
+    const db = await database.get();
+    const result = await db('publishers')
+      .where('id', publisherId)
+      .increment('stake', amount);
+    
+    return result > 0;
   }
 
   /**
    * Get leaderboard
    */
-  getLeaderboard(limit = 20): Array<{
+  async getLeaderboard(limit = 20): Promise<Array<{
     id: string;
     name: string;
     alertsPublished: number;
     alertsConsumed: number;
     reputationScore: number;
     rank: number;
-  }> {
-    const db = database.get();
-    const rows = db.prepare(`
-      SELECT id, name, alerts_published, alerts_consumed, reputation_score
-      FROM publishers
-      WHERE status = 'active'
-      ORDER BY alerts_consumed DESC
-      LIMIT ?
-    `).all(limit) as {
-      id: string;
-      name: string;
-      alerts_published: number;
-      alerts_consumed: number;
-      reputation_score: number;
-    }[];
+  }>> {
+    const db = await database.get();
+    const rows = await db('publishers')
+      .select('id', 'name', 'alerts_published', 'alerts_consumed', 'reputation_score')
+      .where('status', 'active')
+      .orderBy('alerts_consumed', 'desc')
+      .limit(limit) as {
+        id: string;
+        name: string;
+        alerts_published: number;
+        alerts_consumed: number;
+        reputation_score: number;
+      }[];
 
     return rows.map((row, index) => ({
       id: row.id,
@@ -322,38 +322,38 @@ export class PublisherStore {
   /**
    * Stats
    */
-  stats() {
-    const db = database.get();
+  async stats() {
+    const db = await database.get();
     
-    const total = db.prepare('SELECT COUNT(*) as count FROM publishers').get() as { count: number };
-    const active = db.prepare("SELECT COUNT(*) as count FROM publishers WHERE status = 'active'").get() as { count: number };
-    const agg = db.prepare(`
-      SELECT 
-        COALESCE(SUM(alerts_published), 0) as published,
-        COALESCE(SUM(alerts_consumed), 0) as consumed,
-        COALESCE(SUM(stake), 0) as staked
-      FROM publishers
-    `).get() as { published: number; consumed: number; staked: number };
+    const [total] = await db('publishers').count('* as count');
+    const [active] = await db('publishers').where('status', 'active').count('* as count');
+    
+    const [agg] = await db('publishers')
+      .sum('alerts_published as published')
+      .sum('alerts_consumed as consumed')
+      .sum('stake as staked');
 
     return {
-      totalPublishers: total.count,
-      activePublishers: active.count,
-      totalAlertsPublished: agg.published,
-      totalAlertsConsumed: agg.consumed,
-      totalStaked: agg.staked
+      totalPublishers: Number(total.count),
+      activePublishers: Number(active.count),
+      totalAlertsPublished: Number(agg.published) || 0,
+      totalAlertsConsumed: Number(agg.consumed) || 0,
+      totalStaked: Number(agg.staked) || 0
     };
   }
 
   /**
    * List all publishers (public info only)
    */
-  list(limit = 50, includeInactive = false): Array<Omit<Publisher, 'apiKey'>> {
-    const db = database.get();
-    const query = includeInactive
-      ? 'SELECT * FROM publishers LIMIT ?'
-      : "SELECT * FROM publishers WHERE status = 'active' LIMIT ?";
+  async list(limit = 50, includeInactive = false): Promise<Array<Omit<Publisher, 'apiKey'>>> {
+    const db = await database.get();
     
-    const rows = db.prepare(query).all(limit) as PublisherRow[];
+    let query = db('publishers').limit(limit);
+    if (!includeInactive) {
+      query = query.where('status', 'active');
+    }
+    
+    const rows = await query as PublisherRow[];
     
     return rows.map(row => {
       const publisher = this.rowToPublisher(row);

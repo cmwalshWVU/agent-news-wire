@@ -12,32 +12,35 @@ interface SubscriberRow {
   created_at: string;
   balance: number;
   alerts_received: number;
-  active: number;
-  on_chain: number;
+  active: boolean | number;
+  on_chain: boolean | number;
 }
 
 /**
- * Persistent subscription store using SQLite
+ * Persistent subscription store using Knex (SQLite/PostgreSQL)
  * Syncs with Solana on-chain data when wallet is provided
  */
 export class SubscriptionStore {
-  private byWallet: Map<string, string> = new Map(); // In-memory cache: wallet -> subscriberId
-
-  constructor() {
-    // Load wallet mapping into memory for fast lookups
-    this.loadWalletCache();
-  }
+  private walletCache: Map<string, string> = new Map(); // wallet -> subscriberId
+  private initialized = false;
 
   /**
-   * Load wallet -> subscriberId mapping into memory
+   * Initialize wallet cache from database
    */
-  private loadWalletCache() {
-    const db = database.get();
-    const rows = db.prepare('SELECT id, wallet_address FROM subscribers WHERE wallet_address IS NOT NULL').all() as { id: string; wallet_address: string }[];
+  async init() {
+    if (this.initialized) return;
+    
+    const db = await database.get();
+    const rows = await db('subscribers')
+      .select('id', 'wallet_address')
+      .whereNotNull('wallet_address');
+    
     for (const row of rows) {
-      this.byWallet.set(row.wallet_address, row.id);
+      this.walletCache.set(row.wallet_address, row.id);
     }
-    console.log(`[SubscriptionStore] Loaded ${this.byWallet.size} wallet mappings from database`);
+    
+    console.log(`[SubscriptionStore] Loaded ${this.walletCache.size} wallet mappings`);
+    this.initialized = true;
   }
 
   /**
@@ -52,26 +55,27 @@ export class SubscriptionStore {
       createdAt: row.created_at,
       balance: row.balance,
       alertsReceived: row.alerts_received,
-      active: row.active === 1,
-      onChain: row.on_chain === 1
+      active: Boolean(row.active),
+      onChain: Boolean(row.on_chain)
     };
   }
 
   /**
    * Create a new subscription
-   * If walletAddress provided, will also sync with on-chain state
    */
   async subscribe(request: SubscribeRequest): Promise<Subscriber> {
-    const db = database.get();
+    await this.init();
+    const db = await database.get();
 
     // Check if wallet already has subscription
     if (request.walletAddress) {
-      const existingId = this.byWallet.get(request.walletAddress);
+      const existingId = this.walletCache.get(request.walletAddress);
       if (existingId) {
-        const existing = this.get(existingId);
+        const existing = await this.get(existingId);
         if (existing) {
           // Update channels and return existing
-          return this.updateChannels(existingId, request.channels) || existing;
+          const updated = await this.updateChannels(existingId, request.channels);
+          return updated || existing;
         }
       }
     }
@@ -103,9 +107,6 @@ export class SubscriptionStore {
             subscriber.onChain = true;
             console.log(`[SubscriptionStore] Synced on-chain subscriber: ${request.walletAddress}`);
           }
-        } else {
-          subscriber.onChain = false;
-          console.log(`[SubscriptionStore] New subscriber (not yet on-chain): ${request.walletAddress}`);
         }
       } catch (err) {
         console.error('[SubscriptionStore] Error checking on-chain state:', err);
@@ -113,26 +114,21 @@ export class SubscriptionStore {
     }
 
     // Insert into database
-    const stmt = db.prepare(`
-      INSERT INTO subscribers (id, wallet_address, channels, webhook_url, created_at, balance, alerts_received, active, on_chain)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    
-    stmt.run(
-      subscriber.id,
-      subscriber.walletAddress || null,
-      JSON.stringify(subscriber.channels),
-      subscriber.webhookUrl || null,
-      subscriber.createdAt,
-      subscriber.balance,
-      subscriber.alertsReceived,
-      subscriber.active ? 1 : 0,
-      subscriber.onChain ? 1 : 0
-    );
+    await db('subscribers').insert({
+      id: subscriber.id,
+      wallet_address: subscriber.walletAddress || null,
+      channels: JSON.stringify(subscriber.channels),
+      webhook_url: subscriber.webhookUrl || null,
+      created_at: subscriber.createdAt,
+      balance: subscriber.balance,
+      alerts_received: subscriber.alertsReceived,
+      active: subscriber.active,
+      on_chain: subscriber.onChain
+    });
 
     // Update wallet cache
     if (request.walletAddress) {
-      this.byWallet.set(request.walletAddress, subscriber.id);
+      this.walletCache.set(request.walletAddress, subscriber.id);
     }
 
     console.log(`[SubscriptionStore] Created subscriber: ${subscriber.id}`);
@@ -140,85 +136,33 @@ export class SubscriptionStore {
   }
 
   /**
-   * Synchronous subscribe for backward compatibility
-   */
-  subscribeSync(request: SubscribeRequest): Subscriber {
-    const db = database.get();
-
-    // Check if wallet already has subscription
-    if (request.walletAddress) {
-      const existingId = this.byWallet.get(request.walletAddress);
-      if (existingId) {
-        const existing = this.get(existingId);
-        if (existing) {
-          return this.updateChannels(existingId, request.channels) || existing;
-        }
-      }
-    }
-
-    const subscriber: Subscriber = {
-      id: uuid(),
-      channels: request.channels,
-      walletAddress: request.walletAddress,
-      webhookUrl: request.webhookUrl,
-      createdAt: new Date().toISOString(),
-      balance: 0,
-      alertsReceived: 0,
-      active: true,
-      onChain: false
-    };
-
-    const stmt = db.prepare(`
-      INSERT INTO subscribers (id, wallet_address, channels, webhook_url, created_at, balance, alerts_received, active, on_chain)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-    
-    stmt.run(
-      subscriber.id,
-      subscriber.walletAddress || null,
-      JSON.stringify(subscriber.channels),
-      subscriber.webhookUrl || null,
-      subscriber.createdAt,
-      subscriber.balance,
-      subscriber.alertsReceived,
-      subscriber.active ? 1 : 0,
-      subscriber.onChain ? 1 : 0
-    );
-
-    if (request.walletAddress) {
-      this.byWallet.set(request.walletAddress, subscriber.id);
-    }
-
-    return subscriber;
-  }
-
-  /**
    * Get subscriber by ID
    */
-  get(id: string): Subscriber | undefined {
-    const db = database.get();
-    const row = db.prepare('SELECT * FROM subscribers WHERE id = ?').get(id) as SubscriberRow | undefined;
+  async get(id: string): Promise<Subscriber | undefined> {
+    const db = await database.get();
+    const row = await db('subscribers').where('id', id).first() as SubscriberRow | undefined;
     return row ? this.rowToSubscriber(row) : undefined;
   }
 
   /**
    * Get subscriber by wallet address
    */
-  getByWallet(walletAddress: string): Subscriber | undefined {
-    const id = this.byWallet.get(walletAddress);
+  async getByWallet(walletAddress: string): Promise<Subscriber | undefined> {
+    await this.init();
+    const id = this.walletCache.get(walletAddress);
     return id ? this.get(id) : undefined;
   }
 
   /**
    * Get all subscribers for a channel
    */
-  getByChannel(channel: Channel): Subscriber[] {
-    const db = database.get();
-    // SQLite JSON query - check if channel is in the channels array
-    const rows = db.prepare(`
-      SELECT * FROM subscribers 
-      WHERE active = 1 AND channels LIKE ?
-    `).all(`%"${channel}"%`) as SubscriberRow[];
+  async getByChannel(channel: Channel): Promise<Subscriber[]> {
+    const db = await database.get();
+    
+    // JSON contains query - works for both SQLite and PostgreSQL
+    const rows = await db('subscribers')
+      .where('active', true)
+      .where('channels', 'like', `%"${channel}"%`) as SubscriberRow[];
     
     return rows.map(row => this.rowToSubscriber(row));
   }
@@ -226,24 +170,25 @@ export class SubscriptionStore {
   /**
    * Update subscriber channels
    */
-  updateChannels(id: string, channels: Channel[]): Subscriber | null {
-    const db = database.get();
+  async updateChannels(id: string, channels: Channel[]): Promise<Subscriber | null> {
+    const db = await database.get();
     
-    const result = db.prepare(`
-      UPDATE subscribers SET channels = ? WHERE id = ?
-    `).run(JSON.stringify(channels), id);
+    await db('subscribers')
+      .where('id', id)
+      .update({ channels: JSON.stringify(channels) });
 
-    if (result.changes === 0) return null;
-    
-    return this.get(id) || null;
+    const result = await this.get(id);
+    return result ?? null;
   }
 
   /**
-   * Deposit balance (for non-wallet subscribers or mock)
+   * Deposit balance
    */
   async deposit(id: string, amount: number): Promise<Subscriber | null> {
-    const subscriber = this.get(id);
+    const subscriber = await this.get(id);
     if (!subscriber) return null;
+
+    const db = await database.get();
 
     // For on-chain subscribers, refresh balance from chain
     if (subscriber.walletAddress && subscriber.onChain) {
@@ -252,37 +197,30 @@ export class SubscriptionStore {
         const onChainBalance = await solanaClient.getSubscriberBalance(ownerPubkey);
         const newBalance = Number(onChainBalance) / 1e6;
         
-        const db = database.get();
-        db.prepare('UPDATE subscribers SET balance = ? WHERE id = ?').run(newBalance, id);
+        await db('subscribers').where('id', id).update({ balance: newBalance });
         
         console.log(`[SubscriptionStore] Refreshed on-chain balance: ${newBalance} USDC`);
-        return this.get(id) || null;
+        const updated = await this.get(id);
+        return updated ?? null;
       } catch (err) {
         console.error('[SubscriptionStore] Error fetching on-chain balance:', err);
       }
     }
 
     // Mock deposit for non-wallet subscribers
-    const db = database.get();
-    db.prepare('UPDATE subscribers SET balance = balance + ? WHERE id = ?').run(amount, id);
-    return this.get(id) || null;
+    await db('subscribers')
+      .where('id', id)
+      .increment('balance', amount);
+    
+    const result = await this.get(id);
+    return result ?? null;
   }
 
   /**
-   * Synchronous deposit for backward compatibility
-   */
-  depositSync(id: string, amount: number): Subscriber | null {
-    const db = database.get();
-    const result = db.prepare('UPDATE subscribers SET balance = balance + ? WHERE id = ?').run(amount, id);
-    if (result.changes === 0) return null;
-    return this.get(id) || null;
-  }
-
-  /**
-   * Get balance (refreshes from on-chain if applicable)
+   * Get balance
    */
   async getBalance(id: string): Promise<number> {
-    const subscriber = this.get(id);
+    const subscriber = await this.get(id);
     if (!subscriber) return 0;
 
     if (subscriber.walletAddress && solanaClient.isValidPublicKey(subscriber.walletAddress)) {
@@ -292,11 +230,11 @@ export class SubscriptionStore {
         const balance = Number(onChainBalance) / 1e6;
         
         // Update cached balance
-        const db = database.get();
-        db.prepare('UPDATE subscribers SET balance = ? WHERE id = ?').run(balance, id);
+        const db = await database.get();
+        await db('subscribers').where('id', id).update({ balance });
         
         return balance;
-      } catch (err) {
+      } catch {
         // Fall back to cached balance
       }
     }
@@ -307,53 +245,61 @@ export class SubscriptionStore {
   /**
    * Charge for an alert
    */
-  charge(id: string, amount: number): boolean {
-    const db = database.get();
+  async charge(id: string, amount: number): Promise<boolean> {
+    const db = await database.get();
     
-    // Atomic check and deduct
-    const subscriber = this.get(id);
+    const subscriber = await this.get(id);
     if (!subscriber || subscriber.balance < amount) return false;
 
-    db.prepare(`
-      UPDATE subscribers 
-      SET balance = balance - ?, alerts_received = alerts_received + 1 
-      WHERE id = ? AND balance >= ?
-    `).run(amount, id, amount);
+    await db('subscribers')
+      .where('id', id)
+      .where('balance', '>=', amount)
+      .decrement('balance', amount)
+      .increment('alerts_received', 1);
 
     return true;
   }
 
   /**
-   * Increment alerts received counter (for trial mode)
+   * Increment alerts received counter
    */
-  incrementAlertsReceived(id: string): boolean {
-    const db = database.get();
-    const result = db.prepare('UPDATE subscribers SET alerts_received = alerts_received + 1 WHERE id = ?').run(id);
-    return result.changes > 0;
+  async incrementAlertsReceived(id: string): Promise<boolean> {
+    const db = await database.get();
+    const result = await db('subscribers')
+      .where('id', id)
+      .increment('alerts_received', 1);
+    
+    return result > 0;
   }
 
   /**
    * Deactivate subscription
    */
-  unsubscribe(id: string): boolean {
-    const db = database.get();
-    const result = db.prepare('UPDATE subscribers SET active = 0 WHERE id = ?').run(id);
-    return result.changes > 0;
+  async unsubscribe(id: string): Promise<boolean> {
+    const db = await database.get();
+    const result = await db('subscribers')
+      .where('id', id)
+      .update({ active: false });
+    
+    return result > 0;
   }
 
   /**
    * Stats
    */
-  stats() {
-    const db = database.get();
+  async stats() {
+    const db = await database.get();
     
-    const total = db.prepare('SELECT COUNT(*) as count FROM subscribers').get() as { count: number };
-    const active = db.prepare('SELECT COUNT(*) as count FROM subscribers WHERE active = 1').get() as { count: number };
-    const onChain = db.prepare('SELECT COUNT(*) as count FROM subscribers WHERE on_chain = 1').get() as { count: number };
+    const [total] = await db('subscribers').count('* as count');
+    const [active] = await db('subscribers').where('active', true).count('* as count');
+    const [onChain] = await db('subscribers').where('on_chain', true).count('* as count');
     
-    // Channel counts - more complex query
+    // Channel counts
     const channelCounts: Record<string, number> = {};
-    const rows = db.prepare('SELECT channels FROM subscribers WHERE active = 1').all() as { channels: string }[];
+    const rows = await db('subscribers')
+      .select('channels')
+      .where('active', true) as { channels: string }[];
+    
     for (const row of rows) {
       const channels = JSON.parse(row.channels) as string[];
       for (const channel of channels) {
@@ -362,9 +308,9 @@ export class SubscriptionStore {
     }
 
     return {
-      totalSubscribers: total.count,
-      activeSubscribers: active.count,
-      onChainSubscribers: onChain.count,
+      totalSubscribers: Number(total.count),
+      activeSubscribers: Number(active.count),
+      onChainSubscribers: Number(onChain.count),
       byChannel: channelCounts
     };
   }

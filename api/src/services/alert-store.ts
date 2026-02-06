@@ -23,11 +23,11 @@ interface AlertRow {
 }
 
 /**
- * Persistent alert store using SQLite
+ * Persistent alert store using Knex (SQLite/PostgreSQL)
  * Stores alerts with deduplication
  */
 export class AlertStore {
-  private maxAlerts = 10000; // Max alerts to keep in database
+  private maxAlerts = 10000;
 
   /**
    * Convert database row to Alert object
@@ -63,31 +63,30 @@ export class AlertStore {
   /**
    * Check if we've already processed this alert
    */
-  isDuplicate(input: AlertInput): boolean {
-    const db = database.get();
+  async isDuplicate(input: AlertInput): Promise<boolean> {
+    const db = await database.get();
     const hash = this.hashAlert(input);
-    const row = db.prepare('SELECT 1 FROM alert_hashes WHERE hash = ?').get(hash);
+    const row = await db('alert_hashes').where('hash', hash).first();
     return !!row;
   }
 
   /**
    * Add a new alert
    */
-  add(input: AlertInput): Alert | null {
-    const db = database.get();
+  async add(input: AlertInput): Promise<Alert | null> {
+    const db = await database.get();
     const hash = this.hashAlert(input);
     
     // Check for duplicate
-    if (this.isDuplicate(input)) {
+    if (await this.isDuplicate(input)) {
       return null;
     }
 
-    // Use original publication time if available, otherwise use now
+    // Use original publication time if available
     const timestamp = input.publishedAt 
       ? new Date(input.publishedAt).toISOString()
       : new Date().toISOString();
 
-    // Remove publishedAt from input before creating alert
     const { publishedAt, ...alertData } = input;
 
     const alert: Alert = {
@@ -97,43 +96,35 @@ export class AlertStore {
     };
 
     // Insert alert
-    const insertAlert = db.prepare(`
-      INSERT INTO alerts (
-        alert_id, channel, priority, timestamp, headline, summary,
-        entities, tickers, tokens, source_url, source_type,
-        sentiment, impact_score, raw_data, publisher_id, publisher_name, hash
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `);
-
-    insertAlert.run(
-      alert.alertId,
-      alert.channel,
-      alert.priority,
-      alert.timestamp,
-      alert.headline,
-      alert.summary,
-      JSON.stringify(alert.entities),
-      JSON.stringify(alert.tickers),
-      JSON.stringify(alert.tokens),
-      alert.sourceUrl,
-      alert.sourceType,
-      alert.sentiment || null,
-      alert.impactScore || null,
-      alert.rawData ? JSON.stringify(alert.rawData) : null,
-      alert.publisherId || null,
-      alert.publisherName || null,
+    await db('alerts').insert({
+      alert_id: alert.alertId,
+      channel: alert.channel,
+      priority: alert.priority,
+      timestamp: alert.timestamp,
+      headline: alert.headline,
+      summary: alert.summary,
+      entities: JSON.stringify(alert.entities),
+      tickers: JSON.stringify(alert.tickers),
+      tokens: JSON.stringify(alert.tokens),
+      source_url: alert.sourceUrl,
+      source_type: alert.sourceType,
+      sentiment: alert.sentiment || null,
+      impact_score: alert.impactScore || null,
+      raw_data: alert.rawData ? JSON.stringify(alert.rawData) : null,
+      publisher_id: alert.publisherId || null,
+      publisher_name: alert.publisherName || null,
       hash
-    );
+    });
 
     // Insert hash for deduplication
-    db.prepare('INSERT INTO alert_hashes (hash, alert_id, created_at) VALUES (?, ?, ?)').run(
+    await db('alert_hashes').insert({
       hash,
-      alert.alertId,
-      new Date().toISOString()
-    );
+      alert_id: alert.alertId,
+      created_at: new Date().toISOString()
+    });
 
     // Cleanup old alerts if over limit
-    this.cleanup();
+    await this.cleanup();
 
     return alert;
   }
@@ -141,14 +132,12 @@ export class AlertStore {
   /**
    * Get alerts by channel
    */
-  getByChannel(channel: Channel, limit = 50): Alert[] {
-    const db = database.get();
-    const rows = db.prepare(`
-      SELECT * FROM alerts 
-      WHERE channel = ? 
-      ORDER BY timestamp DESC 
-      LIMIT ?
-    `).all(channel, limit) as AlertRow[];
+  async getByChannel(channel: Channel, limit = 50): Promise<Alert[]> {
+    const db = await database.get();
+    const rows = await db('alerts')
+      .where('channel', channel)
+      .orderBy('timestamp', 'desc')
+      .limit(limit) as AlertRow[];
     
     return rows.map(row => this.rowToAlert(row));
   }
@@ -156,13 +145,11 @@ export class AlertStore {
   /**
    * Get recent alerts across all channels
    */
-  getRecent(limit = 50): Alert[] {
-    const db = database.get();
-    const rows = db.prepare(`
-      SELECT * FROM alerts 
-      ORDER BY timestamp DESC 
-      LIMIT ?
-    `).all(limit) as AlertRow[];
+  async getRecent(limit = 50): Promise<Alert[]> {
+    const db = await database.get();
+    const rows = await db('alerts')
+      .orderBy('timestamp', 'desc')
+      .limit(limit) as AlertRow[];
     
     return rows.map(row => this.rowToAlert(row));
   }
@@ -170,24 +157,27 @@ export class AlertStore {
   /**
    * Get alert by ID
    */
-  get(alertId: string): Alert | undefined {
-    const db = database.get();
-    const row = db.prepare('SELECT * FROM alerts WHERE alert_id = ?').get(alertId) as AlertRow | undefined;
+  async get(alertId: string): Promise<Alert | undefined> {
+    const db = await database.get();
+    const row = await db('alerts')
+      .where('alert_id', alertId)
+      .first() as AlertRow | undefined;
+    
     return row ? this.rowToAlert(row) : undefined;
   }
 
   /**
    * Search alerts by keyword
    */
-  search(query: string, limit = 50): Alert[] {
-    const db = database.get();
+  async search(query: string, limit = 50): Promise<Alert[]> {
+    const db = await database.get();
     const searchTerm = `%${query}%`;
-    const rows = db.prepare(`
-      SELECT * FROM alerts 
-      WHERE headline LIKE ? OR summary LIKE ?
-      ORDER BY timestamp DESC 
-      LIMIT ?
-    `).all(searchTerm, searchTerm, limit) as AlertRow[];
+    
+    const rows = await db('alerts')
+      .where('headline', 'like', searchTerm)
+      .orWhere('summary', 'like', searchTerm)
+      .orderBy('timestamp', 'desc')
+      .limit(limit) as AlertRow[];
     
     return rows.map(row => this.rowToAlert(row));
   }
@@ -195,40 +185,39 @@ export class AlertStore {
   /**
    * Get alerts by publisher
    */
-  getByPublisher(publisherId: string, limit = 50): Alert[] {
-    const db = database.get();
-    const rows = db.prepare(`
-      SELECT * FROM alerts 
-      WHERE publisher_id = ?
-      ORDER BY timestamp DESC 
-      LIMIT ?
-    `).all(publisherId, limit) as AlertRow[];
+  async getByPublisher(publisherId: string, limit = 50): Promise<Alert[]> {
+    const db = await database.get();
+    const rows = await db('alerts')
+      .where('publisher_id', publisherId)
+      .orderBy('timestamp', 'desc')
+      .limit(limit) as AlertRow[];
     
     return rows.map(row => this.rowToAlert(row));
   }
 
   /**
-   * Cleanup old alerts to keep database size manageable
+   * Cleanup old alerts
    */
-  private cleanup() {
-    const db = database.get();
-    const count = db.prepare('SELECT COUNT(*) as count FROM alerts').get() as { count: number };
+  private async cleanup() {
+    const db = await database.get();
+    const [{ count }] = await db('alerts').count('* as count');
     
-    if (count.count > this.maxAlerts) {
-      const toDelete = count.count - this.maxAlerts;
+    if (Number(count) > this.maxAlerts) {
+      const toDelete = Number(count) - this.maxAlerts;
       
-      // Delete oldest alerts
-      db.prepare(`
-        DELETE FROM alerts WHERE alert_id IN (
-          SELECT alert_id FROM alerts ORDER BY timestamp ASC LIMIT ?
-        )
-      `).run(toDelete);
+      // Get oldest alert IDs to delete
+      const oldestAlerts = await db('alerts')
+        .select('alert_id')
+        .orderBy('timestamp', 'asc')
+        .limit(toDelete);
+      
+      const idsToDelete = oldestAlerts.map(a => a.alert_id);
+      
+      await db('alerts').whereIn('alert_id', idsToDelete).del();
 
-      // Cleanup orphaned hashes (older than 7 days)
-      db.prepare(`
-        DELETE FROM alert_hashes 
-        WHERE created_at < datetime('now', '-7 days')
-      `).run();
+      // Cleanup old hashes (older than 7 days)
+      const sevenDaysAgo = new Date(Date.now() - 7 * 24 * 60 * 60 * 1000).toISOString();
+      await db('alert_hashes').where('created_at', '<', sevenDaysAgo).del();
 
       console.log(`[AlertStore] Cleaned up ${toDelete} old alerts`);
     }
@@ -237,25 +226,26 @@ export class AlertStore {
   /**
    * Stats
    */
-  stats() {
-    const db = database.get();
+  async stats() {
+    const db = await database.get();
     
-    const total = db.prepare('SELECT COUNT(*) as count FROM alerts').get() as { count: number };
-    const hashes = db.prepare('SELECT COUNT(*) as count FROM alert_hashes').get() as { count: number };
+    const [total] = await db('alerts').count('* as count');
+    const [hashes] = await db('alert_hashes').count('* as count');
     
     // Channel counts
-    const channelRows = db.prepare(`
-      SELECT channel, COUNT(*) as count FROM alerts GROUP BY channel
-    `).all() as { channel: string; count: number }[];
+    const channelRows = await db('alerts')
+      .select('channel')
+      .count('* as count')
+      .groupBy('channel') as { channel: string; count: number }[];
     
     const byChannel: Record<string, number> = {};
     for (const row of channelRows) {
-      byChannel[row.channel] = row.count;
+      byChannel[row.channel] = Number(row.count);
     }
 
     return {
-      totalAlerts: total.count,
-      uniqueHashes: hashes.count,
+      totalAlerts: Number(total.count),
+      uniqueHashes: Number(hashes.count),
       byChannel
     };
   }
