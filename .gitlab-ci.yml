@@ -79,23 +79,19 @@ deploy-api:
   needs: ["typecheck-api"]
   script:
     - echo "Checking Railway credentials..."
-    - test -n "$RAILWAY_TOKEN" || (echo "ERROR - RAILWAY_TOKEN not set" && exit 1)
-    - test -n "$RAILWAY_PROJECT_ID" || (echo "ERROR - RAILWAY_PROJECT_ID not set" && exit 1)
-    - echo "Project ID is $RAILWAY_PROJECT_ID"
+    - test -n "$RAILWAY_TOKEN" || (echo "ERROR - RAILWAY_TOKEN not set in GitLab CI/CD Variables" && exit 1)
+    - test -n "$RAILWAY_PROJECT_ID" || (echo "ERROR - RAILWAY_PROJECT_ID not set in GitLab CI/CD Variables" && exit 1)
+    - echo "Credentials found, installing Railway CLI..."
     - npm install -g @railway/cli
     - cd api
+    - echo "Testing Railway auth..."
     - railway whoami
-    - railway status || true
-    - railway up --service api --detach 2>&1 || (echo "Deploy failed" && exit 1)
+    - railway up --service api --detach
   environment:
     name: production
-    url: https://$RAILWAY_API_DOMAIN
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       when: manual
-  variables:
-    RAILWAY_TOKEN: $RAILWAY_TOKEN
-    RAILWAY_PROJECT_ID: $RAILWAY_PROJECT_ID
 
 deploy-frontend:
   stage: deploy
@@ -103,23 +99,19 @@ deploy-frontend:
   needs: ["typecheck-frontend"]
   script:
     - echo "Checking Railway credentials..."
-    - test -n "$RAILWAY_TOKEN" || (echo "ERROR - RAILWAY_TOKEN not set" && exit 1)
-    - test -n "$RAILWAY_PROJECT_ID" || (echo "ERROR - RAILWAY_PROJECT_ID not set" && exit 1)
-    - echo "Project ID is $RAILWAY_PROJECT_ID"
+    - test -n "$RAILWAY_TOKEN" || (echo "ERROR - RAILWAY_TOKEN not set in GitLab CI/CD Variables" && exit 1)
+    - test -n "$RAILWAY_PROJECT_ID" || (echo "ERROR - RAILWAY_PROJECT_ID not set in GitLab CI/CD Variables" && exit 1)
+    - echo "Credentials found, installing Railway CLI..."
     - npm install -g @railway/cli
     - cd frontend
+    - echo "Testing Railway auth..."
     - railway whoami
-    - railway status || true
-    - railway up --service frontend --detach 2>&1 || (echo "Deploy failed" && exit 1)
+    - railway up --service frontend --detach
   environment:
     name: production
-    url: https://$RAILWAY_FRONTEND_DOMAIN
   rules:
     - if: $CI_COMMIT_BRANCH == "main"
       when: manual
-  variables:
-    RAILWAY_TOKEN: $RAILWAY_TOKEN
-    RAILWAY_PROJECT_ID: $RAILWAY_PROJECT_ID
 
 # =============================================================================
 # Auto-deploy on main (optional - enable by removing 'when: manual')
