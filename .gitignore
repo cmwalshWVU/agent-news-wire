@@ -49,3 +49,4 @@ api/data/*.db
 *.json.bak
 keypair*.json
 !programs/Anchor.toml
+.hackathon-creds
