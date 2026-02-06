@@ -3,7 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Bell, Filter, Wifi, WifiOff, Pause, Play } from 'lucide-react';
 import { fetchAlerts, fetchChannels, createAlertWebSocket, createSubscription, type Alert, type Channel } from '@/lib/api';
-import { saveSubscription, getStoredSubscription } from '@/lib/subscription';
+import { saveSubscription, getStoredSubscription, clearSubscription } from '@/lib/subscription';
 import { AlertCard } from '@/components/AlertCard';
 import { toast } from 'sonner';
 
@@ -52,6 +52,54 @@ export default function AlertsPage() {
   // WebSocket connection
   useEffect(() => {
     let ws: WebSocket | null = null;
+    let reconnectAttempt = 0;
+    const maxReconnectAttempts = 3;
+    
+    const createNewSubscription = async (): Promise<string | null> => {
+      const allChannels = [
+        'regulatory/sec',
+        'regulatory/cftc',
+        'regulatory/global',
+        'institutional/banks',
+        'institutional/asset-managers',
+        'defi/yields',
+        'defi/hacks',
+        'defi/protocols',
+        'rwa/tokenization',
+        'networks/solana',
+        'networks/ethereum',
+        'networks/hedera',
+        'networks/ripple',
+        'networks/bitcoin',
+        'markets/whale-movements',
+        'markets/liquidations'
+      ];
+      
+      console.log('[Alerts] Creating new subscription...');
+      try {
+        const res = await createSubscription(allChannels);
+        console.log('[Alerts] API response:', res);
+        if (!res?.subscriber?.id) {
+          console.error('[Alerts] Invalid response - no subscriber.id:', res);
+          toast.error('Failed to create subscription: invalid response');
+          return null;
+        }
+        const subscriberId = res.subscriber.id;
+        // Save to unified storage
+        saveSubscription({
+          subscriberId,
+          channels: allChannels,
+          createdAt: new Date().toISOString(),
+        });
+        console.log('[Alerts] Created new subscription:', subscriberId);
+        toast.success(`Subscription created: ${subscriberId.slice(0, 8)}...`);
+        return subscriberId;
+      } catch (err: any) {
+        console.error('[Alerts] Failed to create subscription:', err);
+        toast.error(`Failed to create subscription: ${err.message || 'Unknown error'}`);
+        return null;
+      }
+    };
     
     const connect = async () => {
       // Check for existing subscriber ID in localStorage (unified key)
@@ -59,48 +107,8 @@ export default function AlertsPage() {
       let subscriberId = stored?.subscriberId || null;
       
       if (!subscriberId) {
-        // Create a new subscription with all available channels
-        const allChannels = [
-          'regulatory/sec',
-          'regulatory/cftc',
-          'regulatory/global',
-          'institutional/banks',
-          'institutional/asset-managers',
-          'defi/yields',
-          'defi/hacks',
-          'defi/protocols',
-          'rwa/tokenization',
-          'networks/solana',
-          'networks/ethereum',
-          'networks/hedera',
-          'networks/ripple',
-          'networks/bitcoin',
-          'markets/whale-movements',
-          'markets/liquidations'
-        ];
-        console.log('[Alerts] No subscriber ID found, creating new subscription...');
-        try {
-          const res = await createSubscription(allChannels);
-          console.log('[Alerts] API response:', res);
-          if (!res?.subscriber?.id) {
-            console.error('[Alerts] Invalid response - no subscriber.id:', res);
-            toast.error('Failed to create subscription: invalid response');
-            return;
-          }
-          subscriberId = res.subscriber.id;
-          // Save to unified storage
-          saveSubscription({
-            subscriberId,
-            channels: allChannels,
-            createdAt: new Date().toISOString(),
-          });
-          console.log('[Alerts] Created new subscription:', subscriberId);
-          toast.success(`Subscription created: ${subscriberId.slice(0, 8)}...`);
-        } catch (err: any) {
-          console.error('[Alerts] Failed to create subscription:', err);
-          toast.error(`Failed to create subscription: ${err.message || 'Unknown error'}`);
-          return;
-        }
+        subscriberId = await createNewSubscription();
+        if (!subscriberId) return;
       } else {
         console.log('[Alerts] Using existing subscriber ID:', subscriberId);
       }
@@ -108,16 +116,29 @@ export default function AlertsPage() {
       ws = createAlertWebSocket(
         subscriberId,
         handleNewAlert,
-        (error) => {
+        async (error) => {
           console.error('WS Error:', error);
           setWsConnected(false);
-          // Clear invalid subscriber ID if connection fails
-          if (error.includes('not found')) {
-            const { clearSubscription } = await import('@/lib/subscription');
+          
+          // Clear stale subscription and retry if "not found" error
+          if (typeof error === 'string' && error.includes('not found')) {
+            console.log('[Alerts] Subscription not found on server, clearing and reconnecting...');
             clearSubscription();
+            
+            if (reconnectAttempt < maxReconnectAttempts) {
+              reconnectAttempt++;
+              toast.info('Reconnecting with new subscription...');
+              // Small delay before reconnect
+              setTimeout(() => connect(), 500);
+            } else {
+              toast.error('Failed to establish connection after multiple attempts');
+            }
           }
         },
-        () => setWsConnected(true),
+        () => {
+          setWsConnected(true);
+          reconnectAttempt = 0; // Reset on successful connection
+        },
         () => setWsConnected(false)
       );
     };
