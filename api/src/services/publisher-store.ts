@@ -143,7 +143,7 @@ export class PublisherStore {
       alerts_published: publisher.alertsPublished,
       alerts_consumed: publisher.alertsConsumed,
       reputation_score: publisher.reputationScore,
-      stake: publisher.stake,
+      staked_amount: publisher.stake,
       on_chain: publisher.onChain,
       publisher_pda: publisher.publisherPDA || null
     });
