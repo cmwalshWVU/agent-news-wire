@@ -3,6 +3,7 @@
 import { useEffect, useState, useCallback } from 'react';
 import { Bell, Filter, Wifi, WifiOff, Pause, Play } from 'lucide-react';
 import { fetchAlerts, fetchChannels, createAlertWebSocket, createSubscription, type Alert, type Channel } from '@/lib/api';
+import { saveSubscription, getStoredSubscription } from '@/lib/subscription';
 import { AlertCard } from '@/components/AlertCard';
 import { toast } from 'sonner';
 
@@ -53,8 +54,9 @@ export default function AlertsPage() {
     let ws: WebSocket | null = null;
     
     const connect = async () => {
-      // Check for existing subscriber ID in localStorage
-      let subscriberId = localStorage.getItem('anw-subscriber-id');
+      // Check for existing subscriber ID in localStorage (unified key)
+      const stored = getStoredSubscription();
+      let subscriberId = stored?.subscriberId || null;
       
       if (!subscriberId) {
         // Create a new subscription with all available channels
@@ -86,7 +88,12 @@ export default function AlertsPage() {
             return;
           }
           subscriberId = res.subscriber.id;
-          localStorage.setItem('anw-subscriber-id', subscriberId);
+          // Save to unified storage
+          saveSubscription({
+            subscriberId,
+            channels: allChannels,
+            createdAt: new Date().toISOString(),
+          });
           console.log('[Alerts] Created new subscription:', subscriberId);
           toast.success(`Subscription created: ${subscriberId.slice(0, 8)}...`);
         } catch (err: any) {
@@ -106,7 +113,8 @@ export default function AlertsPage() {
           setWsConnected(false);
           // Clear invalid subscriber ID if connection fails
           if (error.includes('not found')) {
-            localStorage.removeItem('anw-subscriber-id');
+            const { clearSubscription } = await import('@/lib/subscription');
+            clearSubscription();
           }
         },
         () => setWsConnected(true),
