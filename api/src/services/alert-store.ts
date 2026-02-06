@@ -95,32 +95,40 @@ export class AlertStore {
       timestamp
     };
 
-    // Insert alert
-    await db('alerts').insert({
-      alert_id: alert.alertId,
-      channel: alert.channel,
-      priority: alert.priority,
-      timestamp: alert.timestamp,
-      headline: alert.headline?.slice(0, 500),
-      summary: alert.summary,
-      entities: JSON.stringify(alert.entities),
-      tickers: JSON.stringify(alert.tickers),
-      tokens: JSON.stringify(alert.tokens),
-      source_url: alert.sourceUrl?.slice(0, 500),
-      source_type: alert.sourceType,
-      sentiment: alert.sentiment || null,
-      impact_score: alert.impactScore ? Math.round(alert.impactScore) : null,
-      raw_data: alert.rawData ? JSON.stringify(alert.rawData) : null,
-      publisher_id: alert.publisherId || null,
-      publisher_name: alert.publisherName || null,
-      content_hash: hash.slice(0, 255)
-    });
+    try {
+      // Insert alert
+      await db('alerts').insert({
+        alert_id: alert.alertId,
+        channel: alert.channel,
+        priority: alert.priority,
+        timestamp: alert.timestamp,
+        headline: alert.headline?.slice(0, 500),
+        summary: alert.summary,
+        entities: JSON.stringify(alert.entities),
+        tickers: JSON.stringify(alert.tickers),
+        tokens: JSON.stringify(alert.tokens),
+        source_url: alert.sourceUrl?.slice(0, 500),
+        source_type: alert.sourceType,
+        sentiment: alert.sentiment || null,
+        impact_score: alert.impactScore ? Math.round(alert.impactScore) : null,
+        raw_data: alert.rawData ? JSON.stringify(alert.rawData) : null,
+        publisher_id: alert.publisherId || null,
+        publisher_name: alert.publisherName || null,
+        content_hash: hash.slice(0, 255)
+      });
 
-    // Insert hash for deduplication
-    await db('alert_hashes').insert({
-      hash,
-      created_at: new Date().toISOString()
-    });
+      // Insert hash for deduplication
+      await db('alert_hashes').insert({
+        hash,
+        created_at: new Date().toISOString()
+      }).onConflict('hash').ignore();
+    } catch (err: any) {
+      // Duplicate key error - alert already exists
+      if (err.code === '23505') {
+        return null;
+      }
+      throw err;
+    }
 
     // Cleanup old alerts if over limit
     await this.cleanup();
