@@ -78,9 +78,15 @@ deploy-api:
   image: node:${NODE_VERSION}-alpine
   needs: ["typecheck-api"]
   script:
+    - echo "Checking Railway credentials..."
+    - test -n "$RAILWAY_TOKEN" || (echo "ERROR - RAILWAY_TOKEN not set" && exit 1)
+    - test -n "$RAILWAY_PROJECT_ID" || (echo "ERROR - RAILWAY_PROJECT_ID not set" && exit 1)
+    - echo "Project ID is $RAILWAY_PROJECT_ID"
     - npm install -g @railway/cli
     - cd api
-    - railway up --service api --detach
+    - railway whoami
+    - railway status || true
+    - railway up --service api --detach 2>&1 || (echo "Deploy failed" && exit 1)
   environment:
     name: production
     url: https://$RAILWAY_API_DOMAIN
@@ -96,9 +102,15 @@ deploy-frontend:
   image: node:${NODE_VERSION}
   needs: ["typecheck-frontend"]
   script:
+    - echo "Checking Railway credentials..."
+    - test -n "$RAILWAY_TOKEN" || (echo "ERROR - RAILWAY_TOKEN not set" && exit 1)
+    - test -n "$RAILWAY_PROJECT_ID" || (echo "ERROR - RAILWAY_PROJECT_ID not set" && exit 1)
+    - echo "Project ID is $RAILWAY_PROJECT_ID"
     - npm install -g @railway/cli
     - cd frontend
-    - railway up --service frontend --detach
+    - railway whoami
+    - railway status || true
+    - railway up --service frontend --detach 2>&1 || (echo "Deploy failed" && exit 1)
   environment:
     name: production
     url: https://$RAILWAY_FRONTEND_DOMAIN
