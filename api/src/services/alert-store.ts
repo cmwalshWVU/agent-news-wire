@@ -101,19 +101,19 @@ export class AlertStore {
       channel: alert.channel,
       priority: alert.priority,
       timestamp: alert.timestamp,
-      headline: alert.headline,
+      headline: alert.headline?.slice(0, 500),
       summary: alert.summary,
       entities: JSON.stringify(alert.entities),
       tickers: JSON.stringify(alert.tickers),
       tokens: JSON.stringify(alert.tokens),
-      source_url: alert.sourceUrl,
+      source_url: alert.sourceUrl?.slice(0, 500),
       source_type: alert.sourceType,
       sentiment: alert.sentiment || null,
       impact_score: alert.impactScore ? Math.round(alert.impactScore) : null,
       raw_data: alert.rawData ? JSON.stringify(alert.rawData) : null,
       publisher_id: alert.publisherId || null,
       publisher_name: alert.publisherName || null,
-      content_hash: hash
+      content_hash: hash.slice(0, 255)
     });
 
     // Insert hash for deduplication
