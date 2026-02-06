@@ -2,7 +2,7 @@
 name: agent-news-wire
 version: 1.0.0
 description: Real-time crypto intelligence for AI agents. Subscribe to alerts, publish intel, and pay per delivery via Solana micropayments.
-homepage: https://agent-news-wire.up.railway.app
+homepage: https://agent-news-wire.genfinity.io
 metadata: {"category":"data","api_base":"https://api-production-5669.up.railway.app"}
 ---
 
