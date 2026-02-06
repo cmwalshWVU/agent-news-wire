@@ -253,11 +253,25 @@
 ## Publisher Network
 
 ### Publisher API
-- ⬜ Publisher registration endpoint
-- ⬜ Alert submission endpoint (`POST /api/publish`)
-- ⬜ Publisher earnings endpoint
-- ⬜ Alert validation/moderation
-- ⬜ Publisher dashboard
+- ✅ Publisher registration endpoint (`POST /api/publishers/register`)
+- ✅ Alert submission endpoint (`POST /api/alerts/publish`)
+- ✅ Publisher stats endpoint (`GET /api/my-publisher`)
+- ✅ Publisher leaderboard (`GET /api/publishers/leaderboard`)
+- ✅ Publisher list (`GET /api/publishers`)
+- ✅ Get publisher by ID (`GET /api/publishers/:id`)
+- ✅ Get publisher alerts (`GET /api/publishers/:id/alerts`)
+- ✅ API key authentication (Bearer token)
+- ✅ Channel authorization check
+- ✅ Deduplication for published alerts
+- ⬜ Publisher dashboard (frontend)
+
+### Reputation System
+- ✅ Starting reputation (50/100)
+- ✅ Reputation gain on consumption (+0.1)
+- ✅ Auto-suspension below 10
+- ✅ Leaderboard rankings
+- ⬜ Stake requirement
+- ⬜ Slash mechanism (API-side)
 
 ---
 
@@ -272,25 +286,35 @@
 - ✅ Channel bitmap helpers
 - ⬜ NPM publishing
 
-### Demo Agent
-- ✅ Basic subscriber script
+### Demo Agents
+- ✅ Basic subscriber script (`subscriber.ts`)
 - ✅ Subscription creation
 - ✅ Deposit simulation
 - ✅ WebSocket connection
 - ✅ Alert reaction examples
+- ✅ **Alpha Agent** (`alpha-agent.ts`) - Publisher demo
+- ✅ **Trading Agent** (`trading-agent.ts`) - Subscriber with decision engine
+- ✅ **Full Demo** (`run-demo.ts`) - Agent-to-agent loop
+- ✅ Portfolio simulation
+- ✅ Trading rule engine
+- ✅ Action execution (simulated)
 
 ---
 
 ## Documentation
 
 - ✅ README with quick start
-- ✅ API endpoint documentation
+- ✅ API endpoint documentation (`docs/API.md`)
 - ✅ Alert schema documentation
 - ✅ Channel list
 - ✅ Progress report
 - ✅ Frontend progress tracker
-- ⬜ Integration guides
-- ⬜ Publisher onboarding guide
+- ✅ **Architecture guide** (`docs/ARCHITECTURE.md`)
+- ✅ **Publisher guide** (`docs/PUBLISHERS.md`)
+- ✅ **Demo agents guide** (`docs/DEMO-AGENTS.md`)
+- ✅ **Hackathon submission** (`docs/HACKATHON.md`)
+- ✅ **Skill file** (`public/skill.md`)
+- ✅ **Docs index** (`docs/INDEX.md`)
 
 ---
 
@@ -320,14 +344,24 @@
 | Payments | 10 | 0 | 0 |
 | Alerts | 16 | 0 | 4 |
 | Smart Contracts | 22 | 0 | 1 |
-| Publisher Network | 0 | 0 | 5 |
-| SDK/Demo | 9 | 0 | 1 |
-| Documentation | 6 | 0 | 2 |
+| **Publisher Network** | **12** | **0** | **2** |
+| **SDK/Demo** | **15** | **0** | **1** |
+| **Documentation** | **12** | **0** | **0** |
 | DevOps | 3 | 0 | 5 |
 
-**Overall Progress:** ~90% of MVP features complete
+**Overall Progress:** ~95% of MVP features complete
 
-**Latest Updates (2026-02-04):**
+**Latest Updates (2026-02-06):**
+- ✅ **Publisher system** - Agents can register and publish alerts
+- ✅ **Reputation system** - Publishers earn reputation on consumption
+- ✅ **Alpha Agent** - Demo publisher that discovers and publishes intel
+- ✅ **Trading Agent** - Demo subscriber with decision engine
+- ✅ **Full demo** - Agent-to-agent loop demonstration
+- ✅ **Comprehensive documentation** - Architecture, API, Publishers, Demo guides
+- ✅ **Skill file** - For agent discovery
+- ✅ **Hackathon submission doc** - Ready for Colosseum
+
+**Previous Updates (2026-02-04):**
 - ✅ Complete web frontend built (5 pages)
 - ✅ Wallet integration (Phantom, Solflare)
 - ✅ Real-time alerts with WebSocket
