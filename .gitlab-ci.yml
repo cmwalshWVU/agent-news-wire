@@ -79,17 +79,16 @@ deploy-api:
   needs: ["typecheck-api"]
   script:
     - echo "Checking Railway credentials..."
-    - test -n "$RAILWAY_TOKEN" || (echo "ERROR - RAILWAY_TOKEN not set in GitLab CI/CD Variables" && exit 1)
-    - test -n "$RAILWAY_PROJECT_ID" || (echo "ERROR - RAILWAY_PROJECT_ID not set in GitLab CI/CD Variables" && exit 1)
-    - echo "Credentials found, installing Railway CLI..."
+    - test -n "$RAILWAY_TOKEN" || (echo "ERROR - RAILWAY_TOKEN not set" && exit 1)
+    - test -n "$RAILWAY_PROJECT_ID" || (echo "ERROR - RAILWAY_PROJECT_ID not set" && exit 1)
+    - export RAILWAY_TOKEN="$RAILWAY_TOKEN"
+    - export RAILWAY_PROJECT_ID="$RAILWAY_PROJECT_ID"
+    - echo "Token length ${#RAILWAY_TOKEN}, Project ID $RAILWAY_PROJECT_ID"
     - npm install -g @railway/cli
     - cd api
-    - echo "Testing Railway auth..."
-    - railway whoami || echo "whoami failed with exit code $?"
-    - echo "Listing services..."
-    - railway service list || echo "service list failed"
-    - echo "Deploying..."
-    - railway up --service api --detach -v
+    - railway version
+    - railway whoami 2>&1 || true
+    - railway up --service api -d 2>&1
   environment:
     name: production
   rules:
@@ -102,17 +101,16 @@ deploy-frontend:
   needs: ["typecheck-frontend"]
   script:
     - echo "Checking Railway credentials..."
-    - test -n "$RAILWAY_TOKEN" || (echo "ERROR - RAILWAY_TOKEN not set in GitLab CI/CD Variables" && exit 1)
-    - test -n "$RAILWAY_PROJECT_ID" || (echo "ERROR - RAILWAY_PROJECT_ID not set in GitLab CI/CD Variables" && exit 1)
-    - echo "Credentials found, installing Railway CLI..."
+    - test -n "$RAILWAY_TOKEN" || (echo "ERROR - RAILWAY_TOKEN not set" && exit 1)
+    - test -n "$RAILWAY_PROJECT_ID" || (echo "ERROR - RAILWAY_PROJECT_ID not set" && exit 1)
+    - export RAILWAY_TOKEN="$RAILWAY_TOKEN"
+    - export RAILWAY_PROJECT_ID="$RAILWAY_PROJECT_ID"
+    - echo "Token length ${#RAILWAY_TOKEN}, Project ID $RAILWAY_PROJECT_ID"
     - npm install -g @railway/cli
     - cd frontend
-    - echo "Testing Railway auth..."
-    - railway whoami || echo "whoami failed with exit code $?"
-    - echo "Listing services..."
-    - railway service list || echo "service list failed"
-    - echo "Deploying..."
-    - railway up --service frontend --detach -v
+    - railway version
+    - railway whoami 2>&1 || true
+    - railway up --service frontend -d 2>&1
   environment:
     name: production
   rules:
