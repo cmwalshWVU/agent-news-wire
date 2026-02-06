@@ -19,7 +19,7 @@ export interface UseAlertWebSocketOptions {
   onConnect?: () => void;
   onDisconnect?: () => void;
   onError?: (error: string) => void;
-  autoConnect?: boolean;
+  enabled?: boolean;
 }
 
 export function useAlertWebSocket(options: UseAlertWebSocketOptions) {
@@ -29,11 +29,27 @@ export function useAlertWebSocket(options: UseAlertWebSocketOptions) {
     onConnect,
     onDisconnect,
     onError,
-    autoConnect = true,
+    enabled = true,
   } = options;
 
   const wsRef = useRef<WebSocket | null>(null);
   const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const mountedRef = useRef(true);
+  
+  // Store callbacks in refs to avoid dependency issues
+  const onAlertRef = useRef(onAlert);
+  const onConnectRef = useRef(onConnect);
+  const onDisconnectRef = useRef(onDisconnect);
+  const onErrorRef = useRef(onError);
+  
+  // Update refs when callbacks change
+  useEffect(() => {
+    onAlertRef.current = onAlert;
+    onConnectRef.current = onConnect;
+    onDisconnectRef.current = onDisconnect;
+    onErrorRef.current = onError;
+  }, [onAlert, onConnect, onDisconnect, onError]);
+
   const [state, setState] = useState<WebSocketState>({
     connected: false,
     connecting: false,
@@ -42,14 +58,31 @@ export function useAlertWebSocket(options: UseAlertWebSocketOptions) {
     lastAlert: null,
   });
 
+  const disconnect = useCallback(() => {
+    if (reconnectTimeoutRef.current) {
+      clearTimeout(reconnectTimeoutRef.current);
+      reconnectTimeoutRef.current = null;
+    }
+    
+    if (wsRef.current) {
+      wsRef.current.close(1000, 'User disconnected');
+      wsRef.current = null;
+    }
+    
+    if (mountedRef.current) {
+      setState(prev => ({ ...prev, connected: false, connecting: false }));
+    }
+  }, []);
+
   const connect = useCallback(() => {
-    if (!subscriberId) {
-      setState(prev => ({ ...prev, error: 'No subscriber ID provided' }));
+    if (!subscriberId || !mountedRef.current) {
       return;
     }
 
-    if (wsRef.current?.readyState === WebSocket.OPEN) {
-      return; // Already connected
+    // Don't connect if already connected or connecting
+    if (wsRef.current?.readyState === WebSocket.OPEN || 
+        wsRef.current?.readyState === WebSocket.CONNECTING) {
+      return;
     }
 
     setState(prev => ({ ...prev, connecting: true, error: null }));
@@ -59,12 +92,14 @@ export function useAlertWebSocket(options: UseAlertWebSocketOptions) {
       wsRef.current = ws;
 
       ws.onopen = () => {
+        if (!mountedRef.current) return;
         console.log('[WS] Connected to Agent News Wire');
         setState(prev => ({ ...prev, connected: true, connecting: false, error: null }));
-        onConnect?.();
+        onConnectRef.current?.();
       };
 
       ws.onmessage = (event) => {
+        if (!mountedRef.current) return;
         try {
           const data = JSON.parse(event.data);
           
@@ -79,7 +114,7 @@ export function useAlertWebSocket(options: UseAlertWebSocketOptions) {
                 alertsReceived: prev.alertsReceived + 1,
                 lastAlert: data.alert,
               }));
-              onAlert?.(data.alert);
+              onAlertRef.current?.(data.alert);
               break;
               
             case 'warning':
@@ -96,7 +131,7 @@ export function useAlertWebSocket(options: UseAlertWebSocketOptions) {
             case 'error':
               console.error('[WS] Error:', data.message);
               setState(prev => ({ ...prev, error: data.message }));
-              onError?.(data.message);
+              onErrorRef.current?.(data.message);
               break;
           }
         } catch (e) {
@@ -104,56 +139,40 @@ export function useAlertWebSocket(options: UseAlertWebSocketOptions) {
         }
       };
 
-      ws.onerror = (error) => {
-        console.error('[WS] WebSocket error:', error);
+      ws.onerror = () => {
+        if (!mountedRef.current) return;
+        console.error('[WS] WebSocket error');
         setState(prev => ({ ...prev, error: 'Connection error', connecting: false }));
-        onError?.('Connection error');
+        onErrorRef.current?.('Connection error');
       };
 
       ws.onclose = (event) => {
+        if (!mountedRef.current) return;
         console.log('[WS] Disconnected:', event.code, event.reason);
         setState(prev => ({ ...prev, connected: false, connecting: false }));
         wsRef.current = null;
-        onDisconnect?.();
-
-        // Auto-reconnect after 5 seconds if not intentionally closed
-        if (event.code !== 1000 && autoConnect) {
-          reconnectTimeoutRef.current = setTimeout(() => {
-            console.log('[WS] Attempting to reconnect...');
-            connect();
-          }, 5000);
-        }
+        onDisconnectRef.current?.();
       };
     } catch (e) {
+      if (!mountedRef.current) return;
       console.error('[WS] Failed to create WebSocket:', e);
       setState(prev => ({ ...prev, error: 'Failed to connect', connecting: false }));
     }
-  }, [subscriberId, onAlert, onConnect, onDisconnect, onError, autoConnect]);
+  }, [subscriberId]);
 
-  const disconnect = useCallback(() => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-      reconnectTimeoutRef.current = null;
-    }
-    
-    if (wsRef.current) {
-      wsRef.current.close(1000, 'User disconnected');
-      wsRef.current = null;
-    }
-    
-    setState(prev => ({ ...prev, connected: false, connecting: false }));
-  }, []);
-
-  // Auto-connect when subscriberId is available
+  // Connect when enabled and subscriberId is available
   useEffect(() => {
-    if (autoConnect && subscriberId) {
+    mountedRef.current = true;
+    
+    if (enabled && subscriberId) {
       connect();
     }
 
     return () => {
+      mountedRef.current = false;
       disconnect();
     };
-  }, [subscriberId, autoConnect, connect, disconnect]);
+  }, [enabled, subscriberId, connect, disconnect]);
 
   return {
     ...state,

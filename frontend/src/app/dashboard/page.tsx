@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState, useCallback, useRef } from 'react';
 import { useWallet } from '@solana/wallet-adapter-react';
 import { useWalletModal } from '@solana/wallet-adapter-react-ui';
 import { 
@@ -24,6 +24,10 @@ export default function DashboardPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [subscriberId, setSubscriberId] = useState<string | null>(null);
   const [liveAlerts, setLiveAlerts] = useState<Alert[]>([]);
+  const [wsEnabled, setWsEnabled] = useState(false);
+  
+  // Track if we've already tried to setup subscription
+  const setupAttemptedRef = useRef(false);
   
   // Decode channels from bitmap
   const subscribedChannels = pdaInfo?.subscriber?.channels 
@@ -45,47 +49,13 @@ export default function DashboardPage() {
     connecting: wsConnecting, 
     error: wsError,
     alertsReceived: wsAlertsReceived,
-    connect: wsConnect,
-    disconnect: wsDisconnect,
   } = useAlertWebSocket({
     subscriberId,
     onAlert: handleLiveAlert,
-    onConnect: () => toast.success('Live alerts connected!'),
-    onDisconnect: () => toast.info('Live alerts disconnected'),
-    autoConnect: false, // We'll manually connect after creating subscription
+    enabled: wsEnabled,
   });
 
-  // Create API subscription when user has on-chain subscription
-  const setupSubscription = useCallback(async () => {
-    if (!publicKey || !pdaInfo?.existsOnChain || subscriberId) return;
-    
-    try {
-      // Create an API subscription linked to this wallet
-      const result = await createSubscription(subscribedChannels, publicKey.toBase58());
-      if (result.success) {
-        setSubscriberId(result.subscriber.id);
-        console.log('[Dashboard] Created API subscription:', result.subscriber.id);
-      }
-    } catch (err) {
-      console.error('[Dashboard] Failed to create API subscription:', err);
-    }
-  }, [publicKey, pdaInfo?.existsOnChain, subscribedChannels, subscriberId]);
-
-  // Auto-connect WebSocket when we have a subscriber ID
-  useEffect(() => {
-    if (subscriberId && !wsConnected && !wsConnecting) {
-      wsConnect();
-    }
-  }, [subscriberId, wsConnected, wsConnecting, wsConnect]);
-
-  // Setup subscription when on-chain subscription is detected
-  useEffect(() => {
-    if (pdaInfo?.existsOnChain && subscribedChannels.length > 0) {
-      setupSubscription();
-    }
-  }, [pdaInfo?.existsOnChain, subscribedChannels.length, setupSubscription]);
-
-  const loadData = async () => {
+  const loadData = useCallback(async () => {
     try {
       const [statsData, alertsData] = await Promise.all([
         fetchStats(),
@@ -109,7 +79,7 @@ export default function DashboardPage() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [publicKey]);
   
   const refresh = async () => {
     setRefreshing(true);
@@ -123,16 +93,50 @@ export default function DashboardPage() {
       setPdaInfo(null);
       setSubscriberId(null);
       setLiveAlerts([]);
-      wsDisconnect();
+      setWsEnabled(false);
+      setupAttemptedRef.current = false;
     }
-  }, [publicKey, wsDisconnect]);
+  }, [publicKey]);
   
   // Load data on mount and when wallet changes
   useEffect(() => {
     loadData();
-    const interval = setInterval(loadData, 30000); // Refresh every 30s
+    const interval = setInterval(loadData, 30000);
     return () => clearInterval(interval);
-  }, [publicKey]);
+  }, [loadData]);
+
+  // Setup API subscription when on-chain subscription is detected
+  useEffect(() => {
+    const setupSubscription = async () => {
+      if (!publicKey || !pdaInfo?.existsOnChain || subscriberId || setupAttemptedRef.current) {
+        return;
+      }
+      
+      const channels = pdaInfo.subscriber?.channels 
+        ? decodeChannelBitmap(pdaInfo.subscriber.channels)
+        : [];
+      
+      if (channels.length === 0) {
+        return;
+      }
+      
+      setupAttemptedRef.current = true;
+      
+      try {
+        const result = await createSubscription(channels, publicKey.toBase58());
+        if (result.success) {
+          setSubscriberId(result.subscriber.id);
+          setWsEnabled(true);
+          console.log('[Dashboard] Created API subscription:', result.subscriber.id);
+        }
+      } catch (err) {
+        console.error('[Dashboard] Failed to create API subscription:', err);
+        setupAttemptedRef.current = false; // Allow retry
+      }
+    };
+
+    setupSubscription();
+  }, [publicKey, pdaInfo?.existsOnChain, pdaInfo?.subscriber?.channels, subscriberId]);
 
   // Combine live alerts with fetched alerts (live alerts first, deduplicated)
   const combinedAlerts = [...liveAlerts, ...alerts.filter(
@@ -429,13 +433,13 @@ export default function DashboardPage() {
             </a>
           </div>
           <div className="space-y-4">
-            {combinedAlerts.slice(0, 5).map((alert, index) => {
+            {combinedAlerts.slice(0, 5).map((alert) => {
               const isFromSubscribed = subscribedChannels.includes(alert.channel);
               const isLive = liveAlerts.find(la => la.alertId === alert.alertId);
               return (
                 <div 
                   key={alert.alertId} 
-                  className={`${isFromSubscribed ? 'ring-1 ring-primary-500/30 rounded-xl' : ''} ${isLive ? 'animate-pulse-once' : ''}`}
+                  className={`${isFromSubscribed ? 'ring-1 ring-primary-500/30 rounded-xl' : ''}`}
                 >
                   {isLive && (
                     <div className="text-xs text-green-400 mb-1 flex items-center space-x-1">
