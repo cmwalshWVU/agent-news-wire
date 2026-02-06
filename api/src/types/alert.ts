@@ -15,7 +15,8 @@ export const SourceType = z.enum([
   'social',
   'news',
   'protocol',
-  'defi_data'
+  'defi_data',
+  'agent' // Agent-published alerts
 ]);
 export type SourceType = z.infer<typeof SourceType>;
 
@@ -55,7 +56,10 @@ export const Alert = z.object({
   sourceType: SourceType,
   sentiment: AlertSentiment.optional(),
   impactScore: z.number().min(0).max(10).optional(),
-  rawData: z.record(z.unknown()).optional()
+  rawData: z.record(z.unknown()).optional(),
+  // Agent publisher tracking
+  publisherId: z.string().optional(), // ID of agent that published this
+  publisherName: z.string().optional() // Name for display
 });
 export type Alert = z.infer<typeof Alert>;
 

@@ -1,7 +1,7 @@
 import Fastify from 'fastify';
 import websocket from '@fastify/websocket';
 import cors from '@fastify/cors';
-import { subscriptionRoutes, alertRoutes, statsRoutes } from './routes/index.js';
+import { subscriptionRoutes, alertRoutes, statsRoutes, publisherRoutes } from './routes/index.js';
 import { subscriptionStore } from './services/index.js';
 import { distributor } from './distribution/index.js';
 import { IngestionEngine } from './ingestion/index.js';
@@ -39,6 +39,26 @@ async function main() {
   await fastify.register(subscriptionRoutes);
   await fastify.register(alertRoutes);
   await fastify.register(statsRoutes);
+  await fastify.register(publisherRoutes);
+
+  // Serve skill.md for agent discovery
+  fastify.get('/skill.md', async (request, reply) => {
+    const fs = await import('fs/promises');
+    const path = await import('path');
+    const skillPath = path.join(process.cwd(), '..', 'public', 'skill.md');
+    try {
+      const content = await fs.readFile(skillPath, 'utf-8');
+      reply.type('text/markdown; charset=utf-8').send(content);
+    } catch {
+      // Fallback to local path
+      try {
+        const content = await fs.readFile(path.join(process.cwd(), 'public', 'skill.md'), 'utf-8');
+        reply.type('text/markdown; charset=utf-8').send(content);
+      } catch {
+        reply.status(404).send('skill.md not found');
+      }
+    }
+  });
 
   // WebSocket endpoint for real-time alerts
   fastify.get('/api/stream', { websocket: true }, (socket, req) => {
@@ -107,12 +127,18 @@ async function main() {
 ║  REST API:  http://${HOST}:${PORT}                              ║
 ║  WebSocket: ws://${HOST}:${PORT}/api/stream                     ║
 ╠══════════════════════════════════════════════════════════════╣
-║  Endpoints:                                                  ║
+║  Subscriber Endpoints:                                       ║
 ║    POST /api/subscribe      - Create subscription            ║
 ║    GET  /api/channels       - List channels                  ║
 ║    GET  /api/alerts         - Historical alerts              ║
 ║    GET  /api/balance/:id    - Check balance                  ║
 ║    WS   /api/stream         - Real-time alerts               ║
+╠══════════════════════════════════════════════════════════════╣
+║  Publisher Endpoints (Agents):                               ║
+║    POST /api/publishers/register  - Register as publisher    ║
+║    POST /api/alerts/publish       - Publish an alert         ║
+║    GET  /api/publishers           - List publishers          ║
+║    GET  /api/publishers/leaderboard - Publisher rankings     ║
 ╚══════════════════════════════════════════════════════════════╝
     `);
 

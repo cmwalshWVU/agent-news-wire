@@ -1,5 +1,5 @@
 import { FastifyInstance } from 'fastify';
-import { alertStore, subscriptionStore } from '../services/index.js';
+import { alertStore, subscriptionStore, publisherStore } from '../services/index.js';
 import { distributor } from '../distribution/index.js';
 import { solanaClient, SUBSCRIPTION_PROGRAM_ID, ALERT_PROGRAM_ID, PUBLISHER_PROGRAM_ID } from '../services/solana-client.js';
 import { TRIAL_MODE, TRIAL_CONFIG, getEffectiveConfig } from '../config/trial.js';
@@ -15,6 +15,7 @@ export async function statsRoutes(fastify: FastifyInstance) {
     return {
       alerts: alertStore.stats(),
       subscriptions: subscriptionStore.stats(),
+      publishers: publisherStore.stats(),
       distribution: distributor.stats(),
       pricing: {
         trialMode: TRIAL_MODE,
@@ -54,14 +55,21 @@ export async function statsRoutes(fastify: FastifyInstance) {
     return {
       name: 'Agent News Wire',
       description: 'Bloomberg Terminal for the Agent Economy',
-      version: '0.1.0',
+      version: '0.2.0',
+      skillFile: '/skill.md',
       endpoints: {
+        // Subscriber endpoints
         subscribe: 'POST /api/subscribe',
         channels: 'GET /api/channels',
         alerts: 'GET /api/alerts',
         balance: 'GET /api/balance/:id',
         stats: 'GET /api/stats',
-        websocket: 'WS /api/stream'
+        websocket: 'WS /api/stream',
+        // Publisher endpoints (for agents)
+        registerPublisher: 'POST /api/publishers/register',
+        publishAlert: 'POST /api/alerts/publish',
+        publishers: 'GET /api/publishers',
+        leaderboard: 'GET /api/publishers/leaderboard'
       }
     };
   });
