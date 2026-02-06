@@ -1,0 +1,25 @@
+# Dependencies
+node_modules/
+
+# Source files (we copy built dist/)
+src/
+
+# Build artifacts we don't need
+*.log
+*.md
+.git/
+.gitignore
+
+# Local data
+data/*.db
+
+# Test files
+*.test.ts
+__tests__/
+
+# IDE
+.vscode/
+.idea/
+
+# TypeScript config (not needed at runtime)
+tsconfig.json

@@ -1,19 +1,84 @@
 import { v4 as uuid } from 'uuid';
 import { createHash, randomBytes } from 'crypto';
 import { Publisher, PublisherRegisterRequest, PublisherStatus, Channel } from '../types/index.js';
+import { database } from './database.js';
+
+interface PublisherRow {
+  id: string;
+  name: string;
+  description: string | null;
+  wallet_address: string | null;
+  api_key: string;
+  api_key_prefix: string;
+  channels: string;
+  status: string;
+  created_at: string;
+  alerts_published: number;
+  alerts_consumed: number;
+  reputation_score: number;
+  stake: number;
+  on_chain: number;
+  publisher_pda: string | null;
+}
 
 /**
- * Publisher store for agent-based alert publishing.
- * 
- * Manages publisher registration, authentication, and reputation.
- * MVP: In-memory storage
- * Production: Database + on-chain PDAs
+ * Persistent publisher store using SQLite
+ * Manages publisher registration, authentication, and reputation
  */
 export class PublisherStore {
-  private publishers: Map<string, Publisher> = new Map();
+  // In-memory caches for fast lookups
   private byApiKeyHash: Map<string, string> = new Map(); // hash -> publisherId
   private byName: Map<string, string> = new Map(); // name -> publisherId
   private byWallet: Map<string, string> = new Map(); // wallet -> publisherId
+
+  constructor() {
+    this.loadCaches();
+  }
+
+  /**
+   * Load caches from database
+   */
+  private loadCaches() {
+    const db = database.get();
+    const rows = db.prepare('SELECT id, name, api_key, wallet_address FROM publishers').all() as {
+      id: string;
+      name: string;
+      api_key: string;
+      wallet_address: string | null;
+    }[];
+
+    for (const row of rows) {
+      this.byApiKeyHash.set(row.api_key, row.id);
+      this.byName.set(row.name.toLowerCase(), row.id);
+      if (row.wallet_address) {
+        this.byWallet.set(row.wallet_address, row.id);
+      }
+    }
+    console.log(`[PublisherStore] Loaded ${rows.length} publishers from database`);
+  }
+
+  /**
+   * Convert database row to Publisher object
+   */
+  private rowToPublisher(row: PublisherRow): Publisher {
+    return {
+      id: row.id,
+      name: row.name,
+      description: row.description || undefined,
+      walletAddress: row.wallet_address || undefined,
+      apiKey: row.api_key,
+      apiKeyPrefix: row.api_key_prefix,
+      channels: JSON.parse(row.channels) as Channel[],
+      status: row.status as PublisherStatus,
+      createdAt: row.created_at,
+      alertsPublished: row.alerts_published,
+      alertsConsumed: row.alerts_consumed,
+      reputationScore: row.reputation_score,
+      stake: row.stake,
+      onChain: row.on_chain === 1,
+      publisherPDA: row.publisher_pda || undefined
+    };
+  }
 
   /**
    * Generate a secure API key
@@ -37,6 +102,8 @@ export class PublisherStore {
    * Returns the publisher object WITH the raw API key (only time it's shown)
    */
   register(request: PublisherRegisterRequest): { publisher: Publisher; apiKey: string } {
+    const db = database.get();
+
     // Check for duplicate name
     if (this.byName.has(request.name.toLowerCase())) {
       throw new Error('Publisher name already taken');
@@ -54,7 +121,7 @@ export class PublisherStore {
       name: request.name,
       description: request.description,
       walletAddress: request.walletAddress,
-      apiKey: hash, // Store only the hash
+      apiKey: hash,
       apiKeyPrefix: prefix,
       channels: request.channels,
       status: 'active',
@@ -66,7 +133,34 @@ export class PublisherStore {
       onChain: false
     };
 
-    this.publishers.set(publisher.id, publisher);
+    // Insert into database
+    const stmt = db.prepare(`
+      INSERT INTO publishers (
+        id, name, description, wallet_address, api_key, api_key_prefix,
+        channels, status, created_at, alerts_published, alerts_consumed,
+        reputation_score, stake, on_chain, publisher_pda
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      publisher.id,
+      publisher.name,
+      publisher.description || null,
+      publisher.walletAddress || null,
+      publisher.apiKey,
+      publisher.apiKeyPrefix,
+      JSON.stringify(publisher.channels),
+      publisher.status,
+      publisher.createdAt,
+      publisher.alertsPublished,
+      publisher.alertsConsumed,
+      publisher.reputationScore,
+      publisher.stake,
+      publisher.onChain ? 1 : 0,
+      publisher.publisherPDA || null
+    );
+
+    // Update caches
     this.byApiKeyHash.set(hash, publisher.id);
     this.byName.set(request.name.toLowerCase(), publisher.id);
     if (request.walletAddress) {
@@ -80,7 +174,6 @@ export class PublisherStore {
 
   /**
    * Authenticate by API key
-   * Returns the publisher if valid, null otherwise
    */
   authenticate(apiKey: string): Publisher | null {
     if (!apiKey || !apiKey.startsWith('anw_')) {
@@ -94,7 +187,7 @@ export class PublisherStore {
       return null;
     }
 
-    const publisher = this.publishers.get(publisherId);
+    const publisher = this.get(publisherId);
     
     if (!publisher || publisher.status !== 'active') {
       return null;
@@ -107,7 +200,9 @@ export class PublisherStore {
    * Get publisher by ID
    */
   get(id: string): Publisher | undefined {
-    return this.publishers.get(id);
+    const db = database.get();
+    const row = db.prepare('SELECT * FROM publishers WHERE id = ?').get(id) as PublisherRow | undefined;
+    return row ? this.rowToPublisher(row) : undefined;
   }
 
   /**
@@ -115,14 +210,14 @@ export class PublisherStore {
    */
   getByName(name: string): Publisher | undefined {
     const id = this.byName.get(name.toLowerCase());
-    return id ? this.publishers.get(id) : undefined;
+    return id ? this.get(id) : undefined;
   }
 
   /**
    * Check if publisher can post to a channel
    */
   canPublishTo(publisherId: string, channel: Channel): boolean {
-    const publisher = this.publishers.get(publisherId);
+    const publisher = this.get(publisherId);
     if (!publisher || publisher.status !== 'active') {
       return false;
     }
@@ -133,37 +228,40 @@ export class PublisherStore {
    * Increment alerts published counter
    */
   incrementPublished(publisherId: string): void {
-    const publisher = this.publishers.get(publisherId);
-    if (publisher) {
-      publisher.alertsPublished++;
-    }
+    const db = database.get();
+    db.prepare('UPDATE publishers SET alerts_published = alerts_published + 1 WHERE id = ?').run(publisherId);
   }
 
   /**
-   * Increment alerts consumed counter (called when an alert is delivered)
+   * Increment alerts consumed counter
    */
   incrementConsumed(publisherId: string): void {
-    const publisher = this.publishers.get(publisherId);
-    if (publisher) {
-      publisher.alertsConsumed++;
-      // Increase reputation slightly for consumed alerts
-      publisher.reputationScore = Math.min(100, publisher.reputationScore + 0.1);
-    }
+    const db = database.get();
+    db.prepare(`
+      UPDATE publishers 
+      SET alerts_consumed = alerts_consumed + 1,
+          reputation_score = MIN(100, reputation_score + 0.1)
+      WHERE id = ?
+    `).run(publisherId);
   }
 
   /**
-   * Adjust reputation (positive or negative)
+   * Adjust reputation
    */
   adjustReputation(publisherId: string, delta: number): void {
-    const publisher = this.publishers.get(publisherId);
-    if (publisher) {
-      publisher.reputationScore = Math.max(0, Math.min(100, publisher.reputationScore + delta));
-      
-      // Auto-suspend if reputation drops too low
-      if (publisher.reputationScore < 10) {
-        publisher.status = 'suspended';
-        console.log(`[PublisherStore] Suspended publisher due to low reputation: ${publisher.name}`);
-      }
+    const db = database.get();
+    
+    // Update reputation and potentially suspend
+    db.prepare(`
+      UPDATE publishers 
+      SET reputation_score = MAX(0, MIN(100, reputation_score + ?)),
+          status = CASE WHEN MAX(0, MIN(100, reputation_score + ?)) < 10 THEN 'suspended' ELSE status END
+      WHERE id = ?
+    `).run(delta, delta, publisherId);
+
+    const publisher = this.get(publisherId);
+    if (publisher && publisher.reputationScore < 10) {
+      console.log(`[PublisherStore] Suspended publisher due to low reputation: ${publisher.name}`);
     }
   }
 
@@ -171,24 +269,22 @@ export class PublisherStore {
    * Update publisher status
    */
   setStatus(publisherId: string, status: PublisherStatus): boolean {
-    const publisher = this.publishers.get(publisherId);
-    if (!publisher) return false;
-    publisher.status = status;
-    return true;
+    const db = database.get();
+    const result = db.prepare('UPDATE publishers SET status = ? WHERE id = ?').run(status, publisherId);
+    return result.changes > 0;
   }
 
   /**
-   * Add stake (USDC)
+   * Add stake
    */
   addStake(publisherId: string, amount: number): boolean {
-    const publisher = this.publishers.get(publisherId);
-    if (!publisher) return false;
-    publisher.stake += amount;
-    return true;
+    const db = database.get();
+    const result = db.prepare('UPDATE publishers SET stake = stake + ? WHERE id = ?').run(amount, publisherId);
+    return result.changes > 0;
   }
 
   /**
-   * Get leaderboard (top publishers by consumption)
+   * Get leaderboard
    */
   getLeaderboard(limit = 20): Array<{
     id: string;
@@ -198,31 +294,53 @@ export class PublisherStore {
     reputationScore: number;
     rank: number;
   }> {
-    return Array.from(this.publishers.values())
-      .filter(p => p.status === 'active')
-      .sort((a, b) => b.alertsConsumed - a.alertsConsumed)
-      .slice(0, limit)
-      .map((p, index) => ({
-        id: p.id,
-        name: p.name,
-        alertsPublished: p.alertsPublished,
-        alertsConsumed: p.alertsConsumed,
-        reputationScore: Math.round(p.reputationScore * 10) / 10,
-        rank: index + 1
-      }));
+    const db = database.get();
+    const rows = db.prepare(`
+      SELECT id, name, alerts_published, alerts_consumed, reputation_score
+      FROM publishers
+      WHERE status = 'active'
+      ORDER BY alerts_consumed DESC
+      LIMIT ?
+    `).all(limit) as {
+      id: string;
+      name: string;
+      alerts_published: number;
+      alerts_consumed: number;
+      reputation_score: number;
+    }[];
+
+    return rows.map((row, index) => ({
+      id: row.id,
+      name: row.name,
+      alertsPublished: row.alerts_published,
+      alertsConsumed: row.alerts_consumed,
+      reputationScore: Math.round(row.reputation_score * 10) / 10,
+      rank: index + 1
+    }));
   }
 
   /**
    * Stats
    */
   stats() {
-    const all = Array.from(this.publishers.values());
+    const db = database.get();
+    
+    const total = db.prepare('SELECT COUNT(*) as count FROM publishers').get() as { count: number };
+    const active = db.prepare("SELECT COUNT(*) as count FROM publishers WHERE status = 'active'").get() as { count: number };
+    const agg = db.prepare(`
+      SELECT 
+        COALESCE(SUM(alerts_published), 0) as published,
+        COALESCE(SUM(alerts_consumed), 0) as consumed,
+        COALESCE(SUM(stake), 0) as staked
+      FROM publishers
+    `).get() as { published: number; consumed: number; staked: number };
+
     return {
-      totalPublishers: this.publishers.size,
-      activePublishers: all.filter(p => p.status === 'active').length,
-      totalAlertsPublished: all.reduce((sum, p) => sum + p.alertsPublished, 0),
-      totalAlertsConsumed: all.reduce((sum, p) => sum + p.alertsConsumed, 0),
-      totalStaked: all.reduce((sum, p) => sum + p.stake, 0)
+      totalPublishers: total.count,
+      activePublishers: active.count,
+      totalAlertsPublished: agg.published,
+      totalAlertsConsumed: agg.consumed,
+      totalStaked: agg.staked
     };
   }
 
@@ -230,10 +348,18 @@ export class PublisherStore {
    * List all publishers (public info only)
    */
   list(limit = 50, includeInactive = false): Array<Omit<Publisher, 'apiKey'>> {
-    return Array.from(this.publishers.values())
-      .filter(p => includeInactive || p.status === 'active')
-      .slice(0, limit)
-      .map(({ apiKey, ...rest }) => rest);
+    const db = database.get();
+    const query = includeInactive
+      ? 'SELECT * FROM publishers LIMIT ?'
+      : "SELECT * FROM publishers WHERE status = 'active' LIMIT ?";
+    
+    const rows = db.prepare(query).all(limit) as PublisherRow[];
+    
+    return rows.map(row => {
+      const publisher = this.rowToPublisher(row);
+      const { apiKey, ...rest } = publisher;
+      return rest;
+    });
   }
 }
 

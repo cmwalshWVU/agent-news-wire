@@ -88,7 +88,7 @@ async function main() {
     distributor.addClient(socket, subscriberId, subscriber.channels as Channel[]);
 
     // Handle incoming messages (e.g., channel updates)
-    socket.on('message', (data) => {
+    socket.on('message', (data: Buffer | ArrayBuffer | Buffer[]) => {
       try {
         const message = JSON.parse(data.toString());
         

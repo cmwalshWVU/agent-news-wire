@@ -1,7 +1,7 @@
 # Agent News Wire - TODO List
 
 **Created:** 2026-02-03  
-**Last Updated:** 2026-02-06 04:30 UTC
+**Last Updated:** 2026-02-06 15:00 UTC
 
 ---
 
@@ -65,17 +65,21 @@
 
 ## 🔴 High Priority (This Week)
 
-### Database & Persistence (CRITICAL)
-- [ ] Add PostgreSQL/SQLite for subscription persistence
-  - Currently in-memory only — server restart loses all subscriptions
-  - Subscribers have stale IDs in localStorage that fail on reconnect
-  - Need to persist: subscribers, alerts, publishers, balances
-- [ ] Schema design for subscriptions, alerts, publishers
-- [ ] Migration strategy for existing in-memory data
+### Database & Persistence ✅ COMPLETE (2026-02-06)
+- [x] Add SQLite for subscription persistence
+- [x] Schema design for subscriptions, alerts, publishers
+- [x] Migrate subscription-store.ts to use SQLite
+- [x] Migrate alert-store.ts to use SQLite  
+- [x] Migrate publisher-store.ts to use SQLite
+- [x] Data persists across server restarts
+
+### Docker & Local Setup ✅ COMPLETE (2026-02-06)
+- [x] Dockerize API server
+- [x] Dockerize frontend (Next.js)
+- [x] Docker Compose for local development
+- [x] Volume mounting for data persistence
 
 ### Cloud Deployment & CI/CD
-- [ ] Dockerize API server
-- [ ] Dockerize frontend (Next.js)
 - [ ] Set up CI/CD pipeline (GitHub Actions or GitLab CI)
   - Build, test, deploy on push to main
   - Environment: staging → production

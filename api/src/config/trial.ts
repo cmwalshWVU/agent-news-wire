@@ -28,8 +28,8 @@ export const TRIAL_CONFIG = {
  * Get effective config (trial overrides on-chain if TRIAL_MODE is true)
  */
 export function getEffectiveConfig(onChainConfig?: {
-  pricePerAlert: number;
-  treasuryFeeBps: number;
+  pricePerAlert?: number;
+  treasuryFeeBps?: number;
 }) {
   if (TRIAL_MODE) {
     return {

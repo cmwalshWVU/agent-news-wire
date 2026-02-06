@@ -6,11 +6,28 @@ A decentralized news distribution protocol where AI agents subscribe to real-tim
 
 ## Prerequisites
 
-- Node.js 18+
+- Node.js 22+ (or Docker)
 - npm or pnpm
 - (Optional) Rust + Anchor CLI for smart contract development
+- (Optional) Docker + Docker Compose for containerized deployment
 
 ## Quick Start
+
+### Option 1: Docker (Recommended)
+
+The fastest way to get started with persistent data:
+
+```bash
+# Start everything with Docker Compose
+docker-compose up --build
+
+# API will be at http://localhost:3000
+# Frontend will be at http://localhost:3001
+```
+
+Data is automatically persisted in a Docker volume.
+
+### Option 2: Local Development
 
 ```bash
 # 1. Start the API server (backend)
@@ -22,6 +39,8 @@ cd frontend && npm install && PORT=3001 npm run dev
 # 3. Open in browser
 open http://localhost:3001
 ```
+
+Data is persisted to `api/data/anw.db` (SQLite).
 
 ## Architecture
 
@@ -62,13 +81,24 @@ open http://localhost:3001
 
 ```
 agent-news-wire/
-├── api/              # Backend REST API + WebSocket
-├── frontend/         # Next.js web application
-├── programs/         # Solana smart contracts (Anchor)
-├── sdk/              # TypeScript client SDK
-├── scripts/          # Deployment & initialization
-├── demo/             # Demo agents (see below)
-└── public/           # Static files (skill.md)
+├── api/                 # Backend REST API + WebSocket
+│   ├── src/
+│   │   ├── services/    # Database, stores, Solana client
+│   │   ├── routes/      # API endpoints
+│   │   ├── ingestion/   # Data source adapters
+│   │   └── distribution/# WebSocket distribution
+│   ├── data/            # SQLite database (gitignored)
+│   └── Dockerfile
+├── frontend/            # Next.js web application
+│   ├── src/app/         # Pages (App Router)
+│   ├── src/components/  # React components
+│   └── Dockerfile
+├── programs/            # Solana smart contracts (Anchor)
+├── sdk/                 # TypeScript client SDK
+├── scripts/             # Deployment & initialization
+├── demo/                # Demo agents
+├── docker-compose.yml   # Docker orchestration
+└── public/              # Static files (skill.md)
 ```
 
 ## Demo Agents
@@ -296,6 +326,86 @@ NEXT_PUBLIC_API_URL=http://localhost:3000
 NEXT_PUBLIC_WS_URL=ws://localhost:3000
 NEXT_PUBLIC_SOLANA_RPC=https://api.devnet.solana.com
 NEXT_PUBLIC_SOLANA_NETWORK=devnet
+```
+
+## Docker Deployment
+
+### Quick Start with Docker Compose
+
+```bash
+# Build and start all services
+docker-compose up --build
+
+# Run in background
+docker-compose up -d
+
+# View logs
+docker-compose logs -f
+
+# Stop services
+docker-compose down
+
+# Stop and remove volumes (⚠️ deletes data)
+docker-compose down -v
+```
+
+### Services
+
+| Service | Port | Description |
+|---------|------|-------------|
+| `api` | 3000 | REST API + WebSocket server |
+| `frontend` | 3001 | Next.js web application |
+
+### Environment Variables
+
+Create a `.env` file in the root directory:
+
+```bash
+# Solana RPC (optional - defaults to devnet)
+SOLANA_RPC_URL=https://api.devnet.solana.com
+
+# Data source API keys (optional)
+WHALE_ALERT_API_KEY=your_key_here
+HELIUS_API_KEY=your_key_here
+```
+
+### Building Individual Images
+
+```bash
+# Build API image
+cd api && docker build -t anw-api .
+
+# Build frontend image
+cd frontend && docker build -t anw-frontend .
+
+# Run API standalone
+docker run -p 3000:3000 -v anw-data:/app/data anw-api
+
+# Run frontend standalone
+docker run -p 3001:3000 -e NEXT_PUBLIC_API_URL=http://localhost:3000 anw-frontend
+```
+
+## Data Persistence
+
+The API uses SQLite for persistent storage:
+
+- **Docker**: Data stored in `anw-data` volume
+- **Local**: Data stored in `api/data/anw.db`
+
+Tables:
+- `subscribers` - Subscription records
+- `alerts` - Alert history
+- `publishers` - Registered publishers
+- `alert_hashes` - Deduplication index
+
+### Backup
+
+```bash
+# Docker: Copy database from volume
+docker cp anw-api:/app/data/anw.db ./backup.db
+
+# Local: Copy directly
+cp api/data/anw.db ./backup.db
 ```
 
 ## Development

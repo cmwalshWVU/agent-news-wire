@@ -39,6 +39,12 @@ tmp/
 temp/
 *.tmp
 
+# SQLite database files
+*.db
+*.db-wal
+*.db-shm
+api/data/*.db
+
 # Keys (NEVER commit real keys)
 *.json.bak
 keypair*.json

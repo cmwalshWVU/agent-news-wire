@@ -1,4 +1,4 @@
-import { WebSocket } from 'ws';
+import WebSocket from 'ws';
 import { Alert, Channel } from '../types/index.js';
 import { subscriptionStore, alertStore } from '../services/index.js';
 import { getEffectiveConfig, TRIAL_MODE } from '../config/trial.js';
@@ -50,7 +50,7 @@ export class AlertDistributor {
       console.log(`[WS] Client disconnected: ${subscriberId}`);
     });
 
-    ws.on('error', (error) => {
+    ws.on('error', (error: Error) => {
       console.error(`[WS] Client error (${subscriberId}):`, error);
       this.clients.delete(subscriberId);
     });
