@@ -36,8 +36,8 @@ RUN npm ci --only=production && npm cache clean --force
 # Copy built files from builder
 COPY --from=builder /app/dist ./dist
 
-# Copy public assets if they exist
-COPY public/ ./public/ 2>/dev/null || true
+# Copy public assets
+COPY public/ ./public/
 
 # Environment variables
 ENV NODE_ENV=production
