@@ -39,7 +39,7 @@ async function initSchema(db: Knex): Promise<void> {
       table.string('source_url');
       table.string('source_type');
       table.string('sentiment').nullable();
-      table.integer('impact_score').nullable();
+      table.decimal('impact_score', 10, 2).nullable();
       table.text('raw_data'); // JSON object
       table.string('content_hash').unique();
       table.string('publisher_id').nullable();

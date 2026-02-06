@@ -109,7 +109,7 @@ export class AlertStore {
       source_url: alert.sourceUrl,
       source_type: alert.sourceType,
       sentiment: alert.sentiment || null,
-      impact_score: alert.impactScore || null,
+      impact_score: alert.impactScore ? Math.round(alert.impactScore) : null,
       raw_data: alert.rawData ? JSON.stringify(alert.rawData) : null,
       publisher_id: alert.publisherId || null,
       publisher_name: alert.publisherName || null,
