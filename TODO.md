@@ -1,7 +1,7 @@
 # Agent News Wire - TODO List
 
 **Created:** 2026-02-03  
-**Last Updated:** 2026-02-06 01:00 UTC
+**Last Updated:** 2026-02-06 04:30 UTC
 
 ---
 
@@ -65,6 +65,24 @@
 
 ## 🔴 High Priority (This Week)
 
+### Database & Persistence (CRITICAL)
+- [ ] Add PostgreSQL/SQLite for subscription persistence
+  - Currently in-memory only — server restart loses all subscriptions
+  - Subscribers have stale IDs in localStorage that fail on reconnect
+  - Need to persist: subscribers, alerts, publishers, balances
+- [ ] Schema design for subscriptions, alerts, publishers
+- [ ] Migration strategy for existing in-memory data
+
+### Cloud Deployment & CI/CD
+- [ ] Dockerize API server
+- [ ] Dockerize frontend (Next.js)
+- [ ] Set up CI/CD pipeline (GitHub Actions or GitLab CI)
+  - Build, test, deploy on push to main
+  - Environment: staging → production
+- [ ] Deploy to cloud provider (Railway / Render / Fly.io / AWS)
+- [ ] Set up environment variables and secrets management
+- [ ] Configure domain and SSL
+
 ### Data Sources
 - [x] Add CFTC RSS feed (`regulatory/cftc` channel) ✅ 2026-02-05
 - [x] Add Rekt News / DeFiLlama Hacks (`defi/hacks` channel) ✅ 2026-02-05
@@ -72,7 +90,6 @@
 - [ ] Add Helius webhooks for Solana on-chain events
 
 ### API Enhancements
-- [ ] Add persistence layer (SQLite or Postgres)
 - [ ] Implement API key authentication
 - [ ] Add rate limiting
 - [ ] Add request logging
@@ -123,11 +140,9 @@
 ## 🔵 Lower Priority (Backlog)
 
 ### Infrastructure
-- [ ] Docker containerization
-- [ ] CI/CD pipeline
-- [ ] Production deployment scripts
-- [ ] Monitoring/alerting (Datadog, etc.)
+- [ ] Monitoring/alerting (Datadog, Sentry, etc.)
 - [ ] Health check dashboard
+- [ ] Log aggregation (structured JSON logs)
 
 ### API Features
 - [ ] Full-text search for alerts
