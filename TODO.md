@@ -1,7 +1,7 @@
 # Agent News Wire - TODO List
 
 **Created:** 2026-02-03  
-**Last Updated:** 2026-02-06 21:00 UTC
+**Last Updated:** 2026-02-08 06:45 UTC
 
 ---
 
@@ -176,7 +176,7 @@
 ### Production URLs
 ```
 API:      https://api-production-5669.up.railway.app
-Frontend: (your frontend URL)
+Frontend: https://agent-news-wire.genfinity.io
 ```
 
 ### Program Addresses (Devnet)

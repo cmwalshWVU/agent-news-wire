@@ -2,8 +2,8 @@
 
 **Goal:** Win Colosseum Agent Hackathon ($50K first place)  
 **Deadline:** Feb 12, 2026 12:00 PM EST (17:00 UTC)  
-**Current Date:** Feb 6, 2026  
-**Days Remaining:** ~6 days
+**Current Date:** Feb 8, 2026  
+**Days Remaining:** ~4 days
 
 ---
 
@@ -11,25 +11,28 @@
 
 ### ✅ What's Working
 - [x] API deployed to Railway (https://api-production-5669.up.railway.app)
-- [x] 463 alerts ingested across 12 channels
+- [x] Frontend deployed (https://agent-news-wire.genfinity.io)
+- [x] **5,047 alerts** ingested across 13 channels
 - [x] 3 Solana programs deployed to devnet
-- [x] 2 subscribers (1 on-chain)
+- [x] 5 subscribers (2 on-chain)
+- [x] 1 publisher registered (genfinity-intel)
 - [x] WebSocket real-time streaming
 - [x] Publisher system with reputation
 - [x] Demo agents (Alpha Agent + Trading Agent)
 - [x] TypeScript SDK
 - [x] Skill file written
 - [x] Comprehensive documentation
+- [x] PostgreSQL persistence (Railway)
+- [x] GitLab CI/CD pipeline
+- [x] Hackathon registered (Project #392)
 
 ### ❌ What's Missing
-- [ ] Hackathon registration (critical!)
-- [ ] Public frontend URL
-- [ ] Custom domain (agentnewswire.com or similar)
-- [ ] GitHub repo (currently GitLab only)
+- [x] ~~Hackathon registration~~ ✅ Done (Project #392)
+- [x] ~~Public frontend URL~~ ✅ https://agent-news-wire.genfinity.io
+- [ ] **MAINNET DEPLOYMENT** (critical differentiator!)
+- [ ] **Publish project** (still in Draft, 0 votes)
 - [ ] Forum posts / engagement
 - [ ] Demo video
-- [ ] End-to-end WebSocket demo working publicly
-- [ ] SEC EDGAR not producing alerts (check data source)
 - [ ] Real Whale Alert API key
 
 ---
@@ -196,15 +199,17 @@ curl -X POST https://agents.colosseum.com/api/my-project/submit \
 
 ## Key Metrics to Hit
 
-| Metric | Current | Target |
-|--------|---------|--------|
-| Channels with data | 12 | 15+ |
-| Total alerts | 463 | 1000+ |
-| Data sources | 5 | 7+ |
-| On-chain subscribers | 1 | 5+ |
-| Forum posts | 0 | 3+ |
-| Demo video | ❌ | ✅ |
-| Working public demo | ❌ | ✅ |
+| Metric | Current | Target | Status |
+|--------|---------|--------|--------|
+| Channels with data | 13 | 15+ | ✅ Close |
+| Total alerts | 5,047 | 1000+ | ✅ 5x target! |
+| Data sources | 6 | 7+ | ✅ Close |
+| On-chain subscribers | 2 | 5+ | 🟡 Needs work |
+| Publishers | 1 | 3+ | 🟡 Needs work |
+| Forum posts | 0 | 3+ | ❌ Critical |
+| Demo video | ❌ | ✅ | ❌ Critical |
+| Mainnet deploy | ❌ | ✅ | ❌ **HIGH PRIORITY** |
+| Project published | ❌ | ✅ | ❌ **BLOCKING** |
 
 ---
 
@@ -284,5 +289,5 @@ git push github main
 
 ---
 
-*Last updated: Feb 6, 2026*
+*Last updated: Feb 8, 2026*
 *Let's win this.*
