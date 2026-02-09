@@ -4,6 +4,10 @@ import { fetchWhaleAlerts, generateMockWhaleAlerts } from './whale-alert.js';
 import { fetchGenfinityNews } from './genfinity.js';
 import { fetchCFTCReleases, generateMockCFTCAlerts } from './cftc.js';
 import { fetchHackAlerts, generateMockHackAlerts } from './rekt-news.js';
+import { fetchChainlinkNews } from './chainlink.js';
+import { fetchHederaNews } from './hedera.js';
+import { fetchSolanaNews } from './solana.js';
+import { fetchAlgorandNews } from './algorand.js';
 import { alertStore } from '../services/index.js';
 import { Alert } from '../types/index.js';
 
@@ -13,6 +17,10 @@ export { fetchWhaleAlerts, generateMockWhaleAlerts } from './whale-alert.js';
 export { fetchGenfinityNews, testGenfinityFetcher } from './genfinity.js';
 export { fetchCFTCReleases, generateMockCFTCAlerts, testCFTCFetcher } from './cftc.js';
 export { fetchHackAlerts, generateMockHackAlerts, testHackFetchers } from './rekt-news.js';
+export { fetchChainlinkNews, testChainlinkFetcher } from './chainlink.js';
+export { fetchHederaNews, testHederaFetcher } from './hedera.js';
+export { fetchSolanaNews, testSolanaFetcher } from './solana.js';
+export { fetchAlgorandNews, testAlgorandFetcher } from './algorand.js';
 
 type AlertHandler = (alert: Alert) => void | Promise<void>;
 
@@ -33,6 +41,15 @@ interface IngestionConfig {
   mockHacks: boolean;
   genfinityEnabled: boolean;
   genfinityIntervalMs: number;
+  // Crypto project feeds
+  chainlinkEnabled: boolean;
+  chainlinkIntervalMs: number;
+  hederaEnabled: boolean;
+  hederaIntervalMs: number;
+  solanaEnabled: boolean;
+  solanaIntervalMs: number;
+  algorandEnabled: boolean;
+  algorandIntervalMs: number;
 }
 
 const DEFAULT_CONFIG: IngestionConfig = {
@@ -51,7 +68,16 @@ const DEFAULT_CONFIG: IngestionConfig = {
   hacksIntervalMs: 5 * 60 * 1000,
   mockHacks: false,
   genfinityEnabled: true,
-  genfinityIntervalMs: 5 * 60 * 1000
+  genfinityIntervalMs: 5 * 60 * 1000,
+  // Crypto project feeds - poll every 10 minutes (blogs don't update that frequently)
+  chainlinkEnabled: true,
+  chainlinkIntervalMs: 10 * 60 * 1000,
+  hederaEnabled: true,
+  hederaIntervalMs: 10 * 60 * 1000,
+  solanaEnabled: true,
+  solanaIntervalMs: 10 * 60 * 1000,
+  algorandEnabled: true,
+  algorandIntervalMs: 10 * 60 * 1000
 };
 
 /**
@@ -219,6 +245,82 @@ export class IngestionEngine {
     console.log(`[Ingestion] Hacks: ${inputs.length} items, ${alerts.length} new alerts`);
   }
 
+  private async pollChainlink() {
+    console.log('[Ingestion] Polling Chainlink blog...');
+    const inputs = await fetchChainlinkNews();
+    const alerts: Alert[] = [];
+    
+    for (const input of inputs) {
+      const alert = await alertStore.add(input);
+      if (alert) {
+        console.log(`[Ingestion] New Chainlink alert: ${alert.headline}`);
+        alerts.push(alert);
+      }
+    }
+    
+    if (alerts.length > 0) {
+      await this.processAlerts(alerts);
+    }
+    console.log(`[Ingestion] Chainlink: ${inputs.length} items, ${alerts.length} new alerts`);
+  }
+
+  private async pollHedera() {
+    console.log('[Ingestion] Polling Hedera blog...');
+    const inputs = await fetchHederaNews();
+    const alerts: Alert[] = [];
+    
+    for (const input of inputs) {
+      const alert = await alertStore.add(input);
+      if (alert) {
+        console.log(`[Ingestion] New Hedera alert: ${alert.headline}`);
+        alerts.push(alert);
+      }
+    }
+    
+    if (alerts.length > 0) {
+      await this.processAlerts(alerts);
+    }
+    console.log(`[Ingestion] Hedera: ${inputs.length} items, ${alerts.length} new alerts`);
+  }
+
+  private async pollSolana() {
+    console.log('[Ingestion] Polling Solana news...');
+    const inputs = await fetchSolanaNews();
+    const alerts: Alert[] = [];
+    
+    for (const input of inputs) {
+      const alert = await alertStore.add(input);
+      if (alert) {
+        console.log(`[Ingestion] New Solana alert: ${alert.headline}`);
+        alerts.push(alert);
+      }
+    }
+    
+    if (alerts.length > 0) {
+      await this.processAlerts(alerts);
+    }
+    console.log(`[Ingestion] Solana: ${inputs.length} items, ${alerts.length} new alerts`);
+  }
+
+  private async pollAlgorand() {
+    console.log('[Ingestion] Polling Algorand blog...');
+    const inputs = await fetchAlgorandNews();
+    const alerts: Alert[] = [];
+    
+    for (const input of inputs) {
+      const alert = await alertStore.add(input);
+      if (alert) {
+        console.log(`[Ingestion] New Algorand alert: ${alert.headline}`);
+        alerts.push(alert);
+      }
+    }
+    
+    if (alerts.length > 0) {
+      await this.processAlerts(alerts);
+    }
+    console.log(`[Ingestion] Algorand: ${inputs.length} items, ${alerts.length} new alerts`);
+  }
+
   async start() {
     if (this.running) return;
     this.running = true;
@@ -253,6 +355,27 @@ export class IngestionEngine {
     if (this.config.hacksEnabled) {
       await this.pollHacks();
       this.intervals.push(setInterval(() => this.pollHacks(), this.config.hacksIntervalMs));
+    }
+
+    // Crypto project feeds
+    if (this.config.chainlinkEnabled) {
+      await this.pollChainlink();
+      this.intervals.push(setInterval(() => this.pollChainlink(), this.config.chainlinkIntervalMs));
+    }
+
+    if (this.config.hederaEnabled) {
+      await this.pollHedera();
+      this.intervals.push(setInterval(() => this.pollHedera(), this.config.hederaIntervalMs));
+    }
+
+    if (this.config.solanaEnabled) {
+      await this.pollSolana();
+      this.intervals.push(setInterval(() => this.pollSolana(), this.config.solanaIntervalMs));
+    }
+
+    if (this.config.algorandEnabled) {
+      await this.pollAlgorand();
+      this.intervals.push(setInterval(() => this.pollAlgorand(), this.config.algorandIntervalMs));
     }
 
     console.log('[Ingestion] Engine started');
@@ -319,6 +442,39 @@ export class IngestionEngine {
       const inputs = this.config.mockHacks
         ? generateMockHackAlerts()
         : await fetchHackAlerts();
+      for (const input of inputs) {
+        const alert = await alertStore.add(input);
+        if (alert) alerts.push(alert);
+      }
+    }
+
+    // Crypto project feeds
+    if (this.config.chainlinkEnabled) {
+      const inputs = await fetchChainlinkNews();
+      for (const input of inputs) {
+        const alert = await alertStore.add(input);
+        if (alert) alerts.push(alert);
+      }
+    }
+
+    if (this.config.hederaEnabled) {
+      const inputs = await fetchHederaNews();
+      for (const input of inputs) {
+        const alert = await alertStore.add(input);
+        if (alert) alerts.push(alert);
+      }
+    }
+
+    if (this.config.solanaEnabled) {
+      const inputs = await fetchSolanaNews();
+      for (const input of inputs) {
+        const alert = await alertStore.add(input);
+        if (alert) alerts.push(alert);
+      }
+    }
+
+    if (this.config.algorandEnabled) {
+      const inputs = await fetchAlgorandNews();
       for (const input of inputs) {
         const alert = await alertStore.add(input);
         if (alert) alerts.push(alert);

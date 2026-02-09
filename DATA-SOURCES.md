@@ -280,6 +280,15 @@ https://lunarcrush.com/api
 | DeFiLlama Hacks | defi/hacks | API | ✅ Implemented |
 | Rekt News | defi/hacks | Scraper | ✅ Implemented (backup) |
 
+### Tier 2.5: Crypto Project Feeds ✅ COMPLETE
+
+| Source | Channel | Method | Status |
+|--------|---------|--------|--------|
+| Chainlink Blog | networks/chainlink | RSS polling | ✅ Implemented |
+| Hedera Blog | networks/hedera | RSS polling | ✅ Implemented |
+| Solana News | networks/solana | RSS polling | ✅ Implemented |
+| Algorand Medium | networks/algorand | RSS polling | ✅ Implemented |
+
 ### Tier 3: Future (Not Started)
 
 | Source | Channel | Method | Difficulty |

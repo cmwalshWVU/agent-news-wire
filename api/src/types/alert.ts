@@ -37,6 +37,8 @@ export const Channel = z.enum([
   'networks/ripple',
   'networks/avalanche',
   'networks/bitcoin',
+  'networks/chainlink',
+  'networks/algorand',
   'markets/whale-movements',
   'markets/liquidations'
 ]);
