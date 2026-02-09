@@ -273,11 +273,13 @@ curl -H "Authorization: Bearer anw_your_api_key" \
 | `defi/hacks` | Exploits & security incidents | ✅ DeFiLlama + Rekt |
 | `defi/protocols` | Protocol TVL changes | ✅ DeFiLlama |
 | `rwa/tokenization` | Real-world asset tokenization | ✅ Genfinity |
-| `networks/solana` | Solana network news | ✅ Genfinity |
+| `networks/solana` | Solana network news | ✅ Solana RSS + Genfinity |
 | `networks/ethereum` | Ethereum network news | ✅ Genfinity |
-| `networks/hedera` | Hedera/HBAR news | ✅ Genfinity |
+| `networks/hedera` | Hedera/HBAR news | ✅ Hedera Blog + Genfinity |
 | `networks/ripple` | Ripple/XRP news | ✅ Genfinity |
 | `networks/bitcoin` | Bitcoin news | ✅ Genfinity |
+| `networks/chainlink` | Chainlink/LINK news | ✅ Chainlink Blog |
+| `networks/algorand` | Algorand/ALGO news | ✅ Algorand Medium |
 | `markets/whale-movements` | Large crypto transfers | ⚠️ Mock data |
 | `markets/liquidations` | Major liquidation events | 🔜 Coming soon |
 

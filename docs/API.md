@@ -578,6 +578,8 @@ All errors follow this format:
 | `networks/ethereum` | Networks | Ethereum ecosystem |
 | `networks/hedera` | Networks | Hedera/HBAR |
 | `networks/ripple` | Networks | Ripple/XRP |
+| `networks/chainlink` | Networks | Chainlink/LINK |
+| `networks/algorand` | Networks | Algorand/ALGO |
 | `networks/bitcoin` | Networks | Bitcoin |
 | `markets/whale-movements` | Markets | Large transfers |
 | `markets/liquidations` | Markets | Major liquidations |

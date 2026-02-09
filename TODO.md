@@ -13,7 +13,13 @@
 - [x] DeFiLlama data source
 - [x] Whale Alert data source (mock)
 - [x] Genfinity data source
-- [x] 17 channels configured
+- [x] CFTC data source
+- [x] DeFi Hacks data source (DeFiLlama + Rekt)
+- [x] Chainlink Blog RSS feed
+- [x] Hedera Blog RSS feed
+- [x] Solana News RSS feed
+- [x] Algorand Medium RSS feed
+- [x] 19 channels configured
 - [x] TypeScript SDK with types
 - [x] Demo subscriber agent
 
@@ -220,7 +226,7 @@ cd sdk && npm run build
 |----------|------|-------|---|
 | Frontend | 15 | 20 | 75% |
 | API + Database | 18 | 20 | 90% |
-| Data Sources | 6 | 10 | 60% |
+| Data Sources | 10 | 10 | 100% |
 | Smart Contracts | 22 | 23 | 96% |
 | Cloud Deploy | 6 | 6 | 100% |
 | Publisher | 2 | 5 | 40% |

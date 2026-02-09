@@ -178,10 +178,12 @@ rwa/
 └── tokenization     # Real-world asset tokenization
 
 networks/
-├── solana           # Solana ecosystem
+├── solana           # Solana ecosystem (Solana RSS + Genfinity)
 ├── ethereum         # Ethereum ecosystem
-├── hedera           # Hedera/HBAR
+├── hedera           # Hedera/HBAR (Hedera Blog + Genfinity)
 ├── ripple           # Ripple/XRP
+├── chainlink        # Chainlink/LINK (Chainlink Blog)
+├── algorand         # Algorand/ALGO (Algorand Medium)
 └── bitcoin          # Bitcoin
 
 markets/

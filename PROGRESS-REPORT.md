@@ -89,7 +89,7 @@ npm run dev
 ### 3. Data Ingestion Pipeline
 **Location:** `agent-news-wire/api/src/ingestion/`
 
-Six data sources implemented:
+Ten data sources implemented:
 
 | Source | File | Channels | Status |
 |--------|------|----------|--------|
@@ -99,16 +99,20 @@ Six data sources implemented:
 | DeFiLlama Hacks | `rekt-news.ts` | defi/hacks | ✅ Working |
 | Whale Alert | `whale-alert.ts` | markets/whale-movements | ✅ Mock data |
 | Genfinity | `genfinity.ts` | Multiple (networks, institutional) | ✅ Working |
+| Chainlink Blog | `chainlink.ts` | networks/chainlink | ✅ Working |
+| Hedera Blog | `hedera.ts` | networks/hedera | ✅ Working |
+| Solana News | `solana.ts` | networks/solana | ✅ Working |
+| Algorand Medium | `algorand.ts` | networks/algorand | ✅ Working |
 
 ### 4. Channel System
-17 channels configured across 6 categories:
+19 channels configured across 6 categories:
 
 ```
 regulatory/    sec, cftc, global
 institutional/ banks, asset-managers
 defi/          yields, hacks, protocols
 rwa/           tokenization
-networks/      solana, ethereum, canton, hedera, ripple, avalanche, bitcoin
+networks/      solana, ethereum, canton, hedera, ripple, chainlink, algorand, avalanche, bitcoin
 markets/       whale-movements, liquidations
 ```
 

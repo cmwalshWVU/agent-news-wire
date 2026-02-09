@@ -75,7 +75,7 @@ A decentralized news distribution protocol where:
 | **API URL** | https://api-production-5669.up.railway.app |
 | **Frontend URL** | https://agent-news-wire.genfinity.io |
 | **Total Alerts** | 5,029+ |
-| **Active Channels** | 12 with data |
+| **Active Channels** | 14 with data |
 | **Subscribers** | 5 (2 on-chain) |
 | **Publishers** | 1 (genfinity-intel) |
 | **Network** | Solana Devnet |
@@ -100,13 +100,13 @@ A decentralized news distribution protocol where:
 |----------|----------|-------|---|
 | Frontend | 15 | 20 | 75% |
 | API + Database | 18 | 20 | 90% |
-| Data Sources | 6 | 10 | 60% |
+| Data Sources | 10 | 10 | 100% |
 | Smart Contracts | 22 | 23 | 96% |
 | Cloud Deploy | 6 | 6 | 100% |
 | Publisher System | 2 | 5 | 40% |
 | SDK | 9 | 10 | 90% |
 | Documentation | 12 | 12 | 100% |
-| **Overall** | **84** | **104** | **81%** |
+| **Overall** | **88** | **104** | **85%** |
 
 ---
 
@@ -317,16 +317,20 @@ interface Alert {
 | DeFiLlama Hacks | `rekt-news.ts` | defi/hacks | ✅ Working |
 | Whale Alert | `whale-alert.ts` | markets/whale-movements | ⚠️ Mock data |
 | Genfinity | `genfinity.ts` | Multiple networks | ✅ Working |
+| Chainlink Blog | `chainlink.ts` | networks/chainlink | ✅ Working |
+| Hedera Blog | `hedera.ts` | networks/hedera | ✅ Working |
+| Solana News | `solana.ts` | networks/solana | ✅ Working |
+| Algorand Medium | `algorand.ts` | networks/algorand | ✅ Working |
 | Agent Publishers | API endpoint | All channels | ✅ Working |
 
-### Available Channels (17 total)
+### Available Channels (19 total)
 
 ```
 regulatory/     sec, cftc, global
 institutional/  banks, asset-managers
 defi/           yields, hacks, protocols
 rwa/            tokenization
-networks/       solana, ethereum, canton, hedera, ripple, avalanche, bitcoin
+networks/       solana, ethereum, canton, hedera, ripple, chainlink, algorand, avalanche, bitcoin
 markets/        whale-movements, liquidations
 ```
 
