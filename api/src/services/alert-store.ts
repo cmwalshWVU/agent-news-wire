@@ -55,19 +55,38 @@ export class AlertStore {
 
   /**
    * Create a hash for deduplication
+   * Uses channel + headline + summary to catch duplicates even with different sourceUrls
+   * (e.g., mock whale alerts generate unique URLs with timestamps)
    */
   private hashAlert(input: AlertInput): string {
-    return `${input.sourceUrl}:${input.headline}`;
+    // For better deduplication, use content-based hash rather than URL-based
+    // This prevents identical content from being stored multiple times
+    const content = `${input.channel}:${input.headline}:${input.summary?.slice(0, 100) || ''}`;
+    return content;
   }
 
   /**
    * Check if we've already processed this alert
+   * Uses both hash-based and time-windowed deduplication
    */
   async isDuplicate(input: AlertInput): Promise<boolean> {
     const db = await database.get();
     const hash = this.hashAlert(input);
+    
+    // Check exact hash match
     const row = await db('alert_hashes').where('hash', hash).first();
-    return !!row;
+    if (row) return true;
+    
+    // Also check for same headline in same channel within last hour
+    // This catches cases where sourceUrl/summary differs slightly
+    const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000).toISOString();
+    const recentDupe = await db('alerts')
+      .where('channel', input.channel)
+      .where('headline', input.headline)
+      .where('timestamp', '>', oneHourAgo)
+      .first();
+    
+    return !!recentDupe;
   }
 
   /**
