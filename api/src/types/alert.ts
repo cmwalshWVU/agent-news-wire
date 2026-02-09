@@ -14,6 +14,8 @@ export const SourceType = z.enum([
   'on_chain',
   'social',
   'news',
+  'news_article', // News from RSS feeds
+  'blog_post', // Blog posts from exchanges/protocols
   'protocol',
   'defi_data',
   'agent' // Agent-published alerts
@@ -21,15 +23,21 @@ export const SourceType = z.enum([
 export type SourceType = z.infer<typeof SourceType>;
 
 export const Channel = z.enum([
+  // Regulatory
   'regulatory/sec',
   'regulatory/cftc',
+  'regulatory/fed',
   'regulatory/global',
+  // Institutional
   'institutional/banks',
   'institutional/asset-managers',
+  // DeFi
   'defi/yields',
   'defi/hacks',
   'defi/protocols',
+  // RWA
   'rwa/tokenization',
+  // Networks
   'networks/solana',
   'networks/ethereum',
   'networks/canton',
@@ -39,8 +47,18 @@ export const Channel = z.enum([
   'networks/bitcoin',
   'networks/chainlink',
   'networks/algorand',
+  // Markets
   'markets/whale-movements',
-  'markets/liquidations'
+  'markets/liquidations',
+  // News
+  'news/coindesk',
+  'news/cointelegraph',
+  'news/defi',
+  'news/general',
+  'news/institutional',
+  'news/markets',
+  // Exchanges
+  'exchanges/kraken'
 ]);
 export type Channel = z.infer<typeof Channel>;
 
