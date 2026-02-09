@@ -1,4 +1,5 @@
 import { v4 as uuid } from 'uuid';
+import { createHash } from 'crypto';
 import { Alert, AlertInput, Channel } from '../types/index.js';
 import { database } from './database.js';
 
@@ -62,7 +63,8 @@ export class AlertStore {
     // For better deduplication, use content-based hash rather than URL-based
     // This prevents identical content from being stored multiple times
     const content = `${input.channel}:${input.headline}:${input.summary?.slice(0, 100) || ''}`;
-    return content;
+    // Use SHA256 to produce a fixed-length 64-char hex string (fits in varchar(255))
+    return createHash('sha256').update(content).digest('hex');
   }
 
   /**
