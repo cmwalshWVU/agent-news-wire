@@ -60,9 +60,9 @@ const DEFAULT_CONFIG: IngestionConfig = {
   mockCFTC: false,
   defiLlamaEnabled: true,
   defiLlamaIntervalMs: 5 * 60 * 1000,
-  whaleAlertEnabled: false,
+  whaleAlertEnabled: true,
   whaleAlertApiKey: process.env.WHALE_ALERT_API_KEY,
-  whaleAlertIntervalMs: 60 * 1000,
+  whaleAlertIntervalMs: 5 * 60 * 1000, // 5 min (free tier: 10 req/min)
   mockWhales: false,
   hacksEnabled: true,
   hacksIntervalMs: 5 * 60 * 1000,
