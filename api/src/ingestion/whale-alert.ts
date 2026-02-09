@@ -177,15 +177,23 @@ export function generateMockWhaleAlerts(): AlertInput[] {
     const variedAmount = Math.floor(tx.amount * variance);
     const variedUsd = Math.floor(tx.amount_usd * variance);
     
+    // Use real blockchain explorer URLs for mock data
+    const explorerUrls: Record<string, string> = {
+      bitcoin: 'https://blockchair.com/bitcoin',
+      ethereum: 'https://etherscan.io',
+      ripple: 'https://xrpscan.com',
+      hedera: 'https://hashscan.io/mainnet'
+    };
+    
     return {
       channel: 'markets/whale-movements' as const,
       priority: 'high' as const,
       headline: `🐋 ${formatAmount(variedAmount, tx.symbol)} ($${(variedUsd / 1_000_000).toFixed(0)}M) moved: ${tx.from} → ${tx.to}`,
-      summary: `${tx.blockchain.toUpperCase()} whale transfer detected.`,
+      summary: `${tx.blockchain.toUpperCase()} whale transfer detected. This is simulated data for demonstration.`,
       entities: [tx.from, tx.to],
       tickers: [],
       tokens: [tx.symbol],
-      sourceUrl: `https://whale-alert.io/transaction/${tx.blockchain}/${now}-${idx}`,
+      sourceUrl: explorerUrls[tx.blockchain] || 'https://whale-alert.io',
       sourceType: 'on_chain' as const,
       sentiment,
       impactScore: 7,
